@@ -299,7 +299,7 @@
 
 % DOCVAR: college (The name of the thesis writer's college)
 \newcommand{\@college@en}{Technical University of Košice}
-\newcommand{\@college@sk}{Technická univerzita v Košiciach}
+\newcommand{\@college@sk}{Slovenská technická univerzita v Bratislave}
 \newcommand{\@college}{\@college@en}
 \newcommand{\college}[2]{
     \renewcommand{\@college@en}{#1}
@@ -365,7 +365,7 @@
 
 % DOCVAR: thesis (type of the thesis)
 \newcommand{\@thesis@en}{Bachelor thesis}
-\newcommand{\@thesis@sk}{Bakalárska práca}
+\newcommand{\@thesis@sk}{Tímový projekt}
 \newcommand{\@thesis}{\@thesis@en}
 \newcommand{\thesis}[2]{
     \renewcommand{\@thesis@en}{#1}
