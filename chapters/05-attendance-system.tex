@@ -35,7 +35,16 @@ Hlavné funkcie rozhrania:
 
 \section{Ako prebieha zaznamenanie prítomnosti}
 
-Proces evidencie prítomnosti pozostáva zo štyroch po sebe nasledujúcich krokov:
+Na obrázku~\ref{fig:attendance-sequence} je znázornený základný tok údajov
+pri zaznamenaní prítomnosti od priloženia ISIC karty až po zobrazenie výsledkov
+vo webovej aplikácii.
+
+\begin{figure}[h!]
+  \centering
+  \includegraphics[width=\textwidth]{figures/attendance_sequence.png}
+  \caption{Sekvenčný diagram procesu zaznamenania prítomnosti}
+  \label{fig:attendance-sequence}
+\end{figure}
 
 \subsection{Krok 1: Skenovanie ISIC karty}
 Študent príde na vyučovanie a priloží ISIC kartu k NFC čítačke v učebni. Zariadenie načíta identifikátor karty a vytvorí udalosť dochádzky, ktorá obsahuje základné technické údaje (identifikátor karty, identifikátor zariadenia, čas načítania a~pod.).
