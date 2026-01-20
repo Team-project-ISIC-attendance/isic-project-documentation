@@ -1,0 +1,57 @@
+\chapter{Ako funguje ISIC Attendance System}
+
+Táto kapitola stručne vysvetľuje princíp fungovania prototypu ISIC Attendance System z pohľadu architektúry a spracovania údajov. Cieľom je opísať, akým spôsobom systém prepája fyzickú identifikáciu študenta pomocou ISIC karty s digitálnym záznamom dochádzky, ktorý je následne dostupný vo webovej aplikácii.
+
+\section{Hlavné komponenty systému}
+
+Systém je navrhnutý ako modulárne riešenie pozostávajúce z troch častí: hardvérového zariadenia v učebni, serverovej časti a webového rozhrania. Jednotlivé komponenty spolu komunikujú tak, aby bolo možné spoľahlivo zachytiť udalosť priloženia karty, preniesť ju cez sieť, spracovať na serveri a uložiť do databázy.
+
+\subsection{Hardware: zariadenie v učebni}
+Na evidenciu prítomnosti sa v učebni, kde je potrebné zaznamenávať dochádzku, umiestni kompaktné zariadenie s RFID/NFC čítačkou. V rámci prototypu je hardvérová časť postavená na mikrokontroléri \textit{ESP8266 / ESP12-F} a NFC čítačke \textit{PN532}. Zariadenie sa pripája do lokálnej Wi-Fi siete a odosiela udalosti na server. Na prenos správ sa využíva protokol \textit{MQTT}, ktorý je vhodný pre scenáre s väčším počtom zariadení a častými udalosťami, keďže umožňuje ľahkú a rýchlu výmenu dát.
+
+\subsection{Backend: server a databáza}
+Serverová časť je realizovaná ako serverová služba s \textit{REST API} a podporou prijímania udalostí z hardvérových zariadení cez \textit{MQTT}. V projekte sa používajú open-source technológie, najmä \textit{Python}, a taktiež kontajnerizácia pomocou \textit{Docker}, ktorá zjednodušuje nasadenie systému a zaručuje reprodukovateľnosť prostredia.
+
+Backend zabezpečuje kľúčové funkcie:
+\begin{itemize}
+  \item prijímanie a spracovanie udalostí zo zariadení,
+  \item prácu s databázou, v ktorej sú uložené údaje o študentoch, kurzoch, hodinách a záznamoch dochádzky,
+  \item poskytovanie API pre frontend, teda pre webové rozhranie vyučujúceho/administrátora,
+  \item tvorbu výstupov a podporu exportu/importu v formátoch CSV/Excel/XML pre ďalšie použitie alebo integráciu s inými systémami.
+\end{itemize}
+
+Serverová časť teda predstavuje centrálny prvok, ktorý spája čítacie zariadenia a používateľské webové rozhranie a zabezpečuje konzistentné ukladanie a sprístupnenie údajov.
+
+\subsection{Frontend: webové rozhranie}
+Používatelia pracujú so systémom prostredníctvom webového rozhrania. V projekte je navrhnutá webová aplikácia s moderným UI, implementovaná pomocou \textit{React}. Webová časť poskytuje prístup k údajom o dochádzke a nástroje na správu výučbových objektov.
+
+Hlavné funkcie rozhrania:
+\begin{itemize}
+  \item prihlásenie do systému pre vyučujúcich a administrátorov,
+  \item správa kurzov a študentov (prehľad, pridávanie/úprava, priraďovanie študentov ku kurzom),
+  \item prehľad dochádzky podľa hodín alebo skupín,
+  \item export výsledkov do požadovaných formátov na ďalšie spracovanie alebo prenos.
+\end{itemize}
+
+\section{Ako prebieha zaznamenanie prítomnosti}
+
+Proces evidencie prítomnosti pozostáva zo štyroch po sebe nasledujúcich krokov:
+
+\subsection{Krok 1: Skenovanie ISIC karty}
+Študent príde na vyučovanie a priloží ISIC kartu k NFC čítačke v učebni. Zariadenie načíta identifikátor karty a vytvorí udalosť dochádzky, ktorá obsahuje základné technické údaje (identifikátor karty, identifikátor zariadenia, čas načítania a~pod.).
+
+\subsection{Krok 2: Odoslanie udalosti na server}
+Po načítaní karty zariadenie cez Wi-Fi odošle vytvorenú udalosť na server pomocou \textit{MQTT}. Tento prístup je vhodný aj pri väčšom počte učební a zariadení, pretože výmena správ je rýchla a rozšírenie o ďalšie zariadenia si nevyžaduje zásadné zmeny architektúry.
+
+\subsection{Krok 3: Spracovanie na backende}
+Backend prijme udalosť a vykoná základnú aplikačnú logiku:
+\begin{itemize}
+  \item overí, či je karta systému známa (t.\ j.\ či je priradená konkrétnemu študentovi),
+  \item určí, ku ktorej hodine sa udalosť vzťahuje (napr.\ aktívna hodina pre danú učebňu alebo časové okno vyučovania),
+  \item vytvorí alebo aktualizuje záznam v tabuľke dochádzky.
+\end{itemize}
+
+Následne sa udalosť stáva súčasťou štruktúrovaných údajov v databáze, s ktorými dokáže pracovať webové rozhranie.
+
+\subsection{Krok 4: Zobrazenie a výstupy vo webovej aplikácii}
+Vyučujúci alebo administrátor použije webovú aplikáciu na zobrazenie výsledkov: vyberie kurz a konkrétnu hodinu a zobrazí sa zoznam študentov s príslušnými záznamami prítomnosti. V prípade potreby je možné údaje exportovať (alebo importovať) v štandardných formátoch (CSV/Excel/XML).
