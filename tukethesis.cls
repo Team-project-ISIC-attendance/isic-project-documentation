@@ -658,7 +658,7 @@
     \noindent
     \begin{tabular}{@{}p{.18\textwidth}p{.7\textwidth}}
         \supervisorname:& Ing. Ondrej Gallo, PhD. \\
-        \supervisorname:& Martin Nehéz \\
+        \supervisorname:& RNDr. Martin Nehéz, PhD. \\
     \end{tabular}
 
     \vspace{2\baselineskip}
