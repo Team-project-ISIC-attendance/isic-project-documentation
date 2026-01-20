@@ -364,7 +364,7 @@
 \newcommand{\studyprogramme}[1]{\renewcommand{\@studyprogramme}{#1}}
 
 % DOCVAR: thesis (type of the thesis)
-\newcommand{\@thesis@en}{Bachelor thesis}
+\newcommand{\@thesis@en}{Team Project}
 \newcommand{\@thesis@sk}{Tímový projekt}
 \newcommand{\@thesis}{\@thesis@en}
 \newcommand{\thesis}[2]{
@@ -441,8 +441,8 @@
 \newcommand{\frontmatter}{
     \pagenumbering{roman}
     \pagestyle{empty}  % no page numbers until TOC
-    \frontpage
-    % \titlepage
+    %\frontpage
+    \titlepage
     % \abstractpage
 
     % thesis detail specification
@@ -645,20 +645,27 @@
     \vfill
 
     \noindent
-    \begin{tabular}{@{}p{.32\textwidth}p{.7\textwidth}}
-        \studyprogrammename:& \@studyprogramme \\
-        \fieldofstudyname:& \@fieldofstudy \\
-        \supervisorname:& \@supervisor \\
-        \departmentname:& \@department~(\@departmentacr) \\
-        \if\@consultant\empty\else\consultantname:& \@consultant \\ \fi
-        \if\@consultantsaffiliation\empty\else\consultantsaffiliationname:& \@consultantsaffiliation \\ \fi
+    \begin{tabular}{@{}p{.18\textwidth}p{.7\textwidth}}
+        \teammembername:& Andrian-Maksym Balaichuk \\
+        \teammembername:& Danylo Zahorulko \\
+        \teammembername:& Vladyslav Panik \\
+        \teammembername:& Vitalii Romaniuk \\
+        \teammembername:& Yurii Soma \\
+    \end{tabular}
+
+    \vspace{\baselineskip}
+
+    \noindent
+    \begin{tabular}{@{}p{.18\textwidth}p{.7\textwidth}}
+        \supervisorname:& Ing. Ondrej Gallo, PhD. \\
+        \supervisorname:& Martin Nehéz \\
     \end{tabular}
 
     \vspace{2\baselineskip}
 
     \begin{center}
         \centering
-        {\Large \textbf{\@college@city{} \@submissionyear}} \hfill {\Large \textbf{\@author@prefix~\@author@firstname~\@author@lastname~\@author@postfix}}
+        {\textbf{Bratislava \@submissionyear}} \hfill
     \end{center}
 
     \newpage
@@ -725,6 +732,7 @@
 \newcommand{\acrlistname}{No Language Selected}
 \newcommand{\appendixlistname}{No Language Selected}
 \newcommand{\pageabbr}{No Language Selected}
+\newcommand{\teammembername}{No Language Selected}
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -762,6 +770,7 @@
         \renewcommand{\secondabstractname}{Abstract in Slovak}
         \renewcommand{\secondkeywordsname}{Keywords in Slovak}
         \renewcommand{\supervisorcitationname}{Supervisor}
+        \renewcommand{\teammembername}{Team Member}
     }
     \addto\captionsslovak{
         \renewcommand{\@abstract}{\@abstract@sk}
@@ -796,8 +805,9 @@
         \renewcommand{\secondkeywordsname}{Kľúčové slová v angličtine}
         \renewcommand{\signaturename}{Vlastnoručný podpis}
         \renewcommand{\studyprogrammename}{Študijný program}
-        \renewcommand{\supervisorname}{Školiteľ}
+        \renewcommand{\supervisorname}{Vedúci práce}
         \renewcommand{\supervisorcitationname}{Vedúci práce}
+        \renewcommand{\teammembername}{Člen tímu}
     }
 
     % Disable color links in the final version (define \printable in metadata.tex)
