@@ -1,0 +1,133 @@
+% !TEX root = ../thesis.tex
+
+\chapter{Analýza problému}\label{ch:analysis-of-problem}
+
+Táto kapitola sa venuje podrobnej analýze problematiky evidencie účasti študentov na vyučovaní. Analyzujeme súčasný stav v akademickom prostredí, identifikujeme hlavné nedostatky existujúcich prístupov a skúmame dostupné technologické riešenia. Na základe tejto analýzy definujeme požiadavky na navrhovaný systém a zdôvodňujeme voľbu technológie RFID/NFC ako základu pre naše riešenie.
+
+\section{Súčasný stav evidencie dochádzky}
+
+Evidencia účasti študentov na vyučovaní je neoddeliteľnou súčasťou vzdelávacieho procesu na vysokých školách. Slúži nielen na administratívne účely, ale aj ako nástroj na sledovanie zapojenia študentov do výučby a včasnú identifikáciu potenciálnych problémov s dochádzkou. V súčasnosti sa na slovenských univerzitách využíva niekoľko prístupov k evidencii dochádzky, pričom každý z nich má svoje špecifické výhody a nevýhody.
+
+\subsection{Manuálna evidencia prostredníctvom podpisových hárkov}
+
+Tradičná metóda evidencie dochádzky prostredníctvom papierových podpisových hárkov zostáva naďalej rozšírená na mnohých fakultách. Pedagóg na začiatku alebo počas vyučovacej hodiny distribuuje hárok, na ktorý sa študenti postupne podpisujú. Alternatívne môže vyučujúci realizovať prezentačné volanie mien zo zoznamu.
+
+Tento prístup má niekoľko zásadných nedostatkov. Časová náročnosť predstavuje jeden z najvýznamnejších problémov, keďže proces zberu podpisov alebo volania mien môže trvať 5 až 15 minút v závislosti od veľkosti skupiny, čo výrazne znižuje efektívny čas vyučovania. Chybovosť manuálnej evidencie dosahuje podľa dostupných štúdií 15 až 20 percent, pričom chyby vznikajú v dôsledku nečitateľných podpisov, nesprávneho zápisu alebo straty dokumentov.
+
+Významným problémom je tiež náchylnosť na zneužitie. Študenti môžu jednoducho podpísať hárok za neprítomných spolužiakov, čo znehodnocuje účel celého procesu evidencie. Následný prepis údajov z papierových hárkov do digitálnych systémov predstavuje ďalšiu administratívnu záťaž a zdroj potenciálnych chýb.
+
+\subsection{Evidencia prostredníctvom QR kódov}
+
+S rozšírením smartfónov sa objavili riešenia založené na skenovaní QR kódov. Pedagóg zobrazí QR kód na projektore alebo zdieľa odkaz, študenti naskenujú kód svojím telefónom a zaregistrujú svoju účasť prostredníctvom webového formulára.
+
+Implementačné varianty zahŕňajú statické QR kódy odkazujúce na registračnú stránku, časovo obmedzené rotujúce kódy s definovanou platnosťou a kombináciu QR kódov s geolokačným overením polohy študenta.
+
+Napriek modernejšiemu prístupu má táto metóda viaceré obmedzenia. Vyžaduje, aby všetci študenti disponovali smartfónom s funkčnou kamerou a pripojením na internet. Kvalita skenovania závisí od osvetlenia miestnosti a kvality zobrazeného kódu. Najzávažnejším problémom zostáva možnosť zdieľania QR kódu alebo odkazu s neprítomným študentom, čo umožňuje rovnaké zneužitie ako pri podpisových hárkoch.
+
+\subsection{Biometrické systémy}
+
+Biometrické metódy využívajú jedinečné fyzické charakteristiky jednotlivca na jeho identifikáciu. V akademickom prostredí sa najčastejšie využívajú snímače odtlačkov prstov, systémy rozpoznávania tváre a v menšej miere skenovanie dúhovky.
+
+Tieto systémy ponúkajú vysokú mieru spoľahlivosti identifikácie a prakticky eliminujú možnosť zastúpenia. Avšak ich nasadenie v akademickom prostredí naráža na závažné prekážky.
+
+Ochrana osobných údajov predstavuje najvýznamnejší problém. Biometrické údaje patria medzi citlivé osobné údaje podľa nariadenia GDPR a ich spracovanie podlieha prísnym požiadavkám. Na rozdiel od hesla alebo karty nie je možné biometrické údaje zmeniť v prípade ich kompromitácie. Incident z roku 2019, kedy došlo k úniku biometrických údajov spoločnosti Suprema zahŕňajúceho odtlačky prstov a údaje rozpoznávania tváre viac ako milióna osôb, ilustruje závažnosť tohto rizika.
+
+Biometrické systémy vykazujú chybovosť približne 1 percent pri falošnom prijatí alebo odmietnutí, čo pri veľkom počte študentov generuje značný počet problematických situácií. Environmentálne faktory ako teplota, vlhkosť a osvetlenie ovplyvňujú presnosť systémov. Fyzické podmienky používateľov vrátane zranení, opotrebovaných odtlačkov alebo ochorení môžu znemožniť identifikáciu.
+
+Vysoké náklady na hardvér a údržbu v kombinácii s etickými námietkami študentov voči sledovaniu prostredníctvom biometrických údajov limitujú praktické nasadenie týchto systémov v akademickom prostredí.
+
+\subsection{Systémy založené na technológii RFID/NFC}
+
+Rádiofrekvenčná identifikácia (RFID) a komunikácia na krátku vzdialenosť (NFC) predstavujú technológie, ktoré umožňujú bezkontaktnú identifikáciu prostredníctvom čipových kariet alebo štítkov. Študent priloží svoju identifikačnú kartu k čítaciemu zariadeniu, ktoré zaznamená jedinečný identifikátor karty a spracuje údaj o účasti.
+
+Táto metóda ponúka viaceré výhody. Proces identifikácie trvá zlomky sekundy, čo umožňuje spracovanie stoviek študentov v krátkom čase. Študentské karty ISIC vydávané na slovenských univerzitách už obsahujú RFID/NFC čip, čo eliminuje potrebu dodatočných identifikačných prostriedkov. Infraštruktúra čítacích zariadení je relatívne nenáročná na náklady v porovnaní s biometrickými systémami.
+
+Medzi nevýhody patrí možnosť klonovania kariet pomocou špecializovaného vybavenia, požičiavanie kariet medzi študentmi a problematika straty alebo poškodenia kariet. Tieto riziká je však možné minimalizovať kombináciou s doplnkovými overovacími mechanizmami a využitím šifrovaných komunikačných protokolov.
+
+\section{Analýza študentských kariet ISIC}
+
+Medzinárodná študentská identifikačná karta ISIC je štandardom pre identifikáciu študentov na slovenských univerzitách. Pochopenie technických špecifikácií týchto kariet je kľúčové pre návrh kompatibilného systému evidencie dochádzky.
+
+\subsection{Technické špecifikácie ISIC kariet}
+
+Karty ISIC vydávané na Slovensku prostredníctvom organizácie CKM SYTS podporujú niekoľko čipových technológií. Súčasné karty využívajú predovšetkým technológiu MIFARE DESFire, zatiaľ čo staršie vydania obsahovali čipy MIFARE Classic 1K. Niektoré karty môžu obsahovať aj čipy MIFARE Ultralight alebo EM4102.
+
+Komunikácia prebieha na frekvencii 13,56 MHz podľa štandardu ISO/IEC 14443 typu A. Karty MIFARE DESFire využívajú rozšírený protokol ISO/IEC 14443-4, ktorý poskytuje vyššiu úroveň zabezpečenia prostredníctvom šifrovania komunikácie.
+
+\subsection{Využitie ISIC kariet na slovenských univerzitách}
+
+Na slovenských univerzitách plnia ISIC karty viaceré funkcie. Slúžia ako prostriedok vstupu do budov univerzity a internátov, identifikácia pre knižničné služby, platobný prostriedok v jedálňach a bufetoch, doklad o nároku na zľavy v mestskej hromadnej doprave a overenie študentského statusu.
+
+Táto viacúčelovosť kariet ISIC predstavuje výhodu pre náš projekt, pretože študenti už kartu vlastnia a pravidelne používajú, čo minimalizuje bariéru prijatia nového systému evidencie dochádzky.
+
+\section{Prehľad existujúcich komerčných riešení}
+
+Na trhu existuje niekoľko komerčných riešení pre automatizovanú evidenciu dochádzky v akademickom prostredí. Analýza týchto riešení poskytuje cenné poznatky o funkcionalitách a prístupoch, ktoré sa v praxi osvedčili.
+
+\subsection{AccuClass}
+
+Systém AccuClass od spoločnosti Engineerica ponúka komplexné riešenie pre sledovanie účasti s podporou viacerých vstupných metód vrátane Bluetooth majákov, QR kódov, preukazov a manuálneho zápisu. Systém poskytuje analytický nástroj pre detekciu vzorcov dochádzky a podporuje integráciu s informačnými systémami pre správu štúdia (SIS) a systémami pre správu výučby (LMS).
+
+\subsection{SEAtS Software}
+
+Platforma SEAtS využíva umelú inteligenciu na identifikáciu rizikových študentov a automatizované intervencie. Podporuje viaceré metódy sledovania vrátane WiFi lokalizácie, QR kódov, mobilných aplikácií a monitorovania online aktivity. Partnerstvo s Canvas LMS zabezpečuje hlbokú integráciu do existujúcich vzdelávacích platforiem.
+
+\subsection{Vevox a Top Hat}
+
+Tieto platformy kombinujú sledovanie dochádzky s nástrojmi pre interaktívnu výučbu vrátane živých prieskumov a diskusných funkcií. Automatická registrácia účasti prebieha počas interaktívnych aktivít, čo prirodzene integruje evidenciu dochádzky do vyučovacieho procesu.
+
+\subsection{Zhodnotenie komerčných riešení}
+
+Komerčné riešenia spravidla vyžadujú značné finančné investície formou licenčných poplatkov a často nezohľadňujú špecifické požiadavky slovenského akademického prostredia vrátane integrácie s existujúcimi univerzitnými systémami. Vlastné riešenie umožňuje prispôsobenie konkrétnym potrebám fakulty a zachováva kontrolu nad údajmi o dochádzke študentov v súlade s požiadavkami GDPR.
+
+\section{Technologické výzvy integrácie}
+
+Integrácia systému evidencie dochádzky s existujúcou akademickou infraštruktúrou predstavuje komplexnú technickú výzvu zahŕňajúcu viaceré aspekty.
+
+\subsection{Integrácia s akademickými informačnými systémami}
+
+Akademické informačné systémy (AIS) používané na slovenských univerzitách často predstavujú uzavreté systémy s obmedzenými možnosťami integrácie. Hlavné výzvy zahŕňajú absenciu alebo nedostatočnú dokumentáciu API rozhraní, rôznorodosť dátových modelov medzi systémami a zabezpečenie synchronizácie údajov v reálnom čase.
+
+Navrhované riešenie preto kladie dôraz na flexibilný mechanizmus exportu a importu údajov v štandardných formátoch (CSV, Excel, XML), ktorý umožňuje prenos údajov do AIS bez nutnosti priamej technickej integrácie.
+
+\subsection{Integrácia s LMS platformami}
+
+Pre integráciu so systémami správy výučby ako Moodle existujú štandardizované rozhrania. Moodle poskytuje natívny modul Attendance s konfigurovateľnými stavmi (prítomný, neprítomný, meškajúci, ospravedlnený) a API pre externú integráciu. Platforma Canvas ponúka nástroj Roll Call Attendance prostredníctvom štandardu LTI.
+
+\subsection{Súlad s nariadením GDPR}
+
+Spracovanie údajov o dochádzke študentov podlieha nariadeniu GDPR, ktoré definuje prísne požiadavky na ochranu osobných údajov. Právnym základom pre spracovanie môže byť článok 6(1)(e) nariadenia, ktorý umožňuje spracovanie nevyhnutné na splnenie úlohy realizovanej vo verejnom záujme.
+
+Požiadavky na súlad zahŕňajú vymenovanie zodpovednej osoby pre ochranu údajov, transparentné informovanie študentov o spracovaní ich údajov, obmedzenie prístupu k údajom na oprávnené osoby a zabezpečenie práv študentov na prístup, opravu, vymazanie a prenositeľnosť údajov.
+
+\section{Bezpečnostné aspekty RFID technológie}
+
+Nasadenie systému založeného na RFID technológii si vyžaduje zohľadnenie potenciálnych bezpečnostných rizík a implementáciu primeraných ochranných opatrení.
+
+\subsection{Identifikované riziká}
+
+Útok klonovaním karty predstavuje možnosť skopírovania údajov z originálnej karty na prázdny nosič pomocou špeciálneho vybavenia, akým je napríklad zariadenie Proxmark. Karty MIFARE Classic sú voči tomuto útoku obzvlášť zraniteľné, zatiaľ čo technológia DESFire poskytuje výrazne vyššiu úroveň ochrany.
+
+Odpočúvanie komunikácie je možné pri nešifrovanom prenose údajov medzi kartou a čítačkou. Útočník s vhodným vybavením môže zachytiť prenášané údaje a potenciálne ich zneužiť.
+
+Požičiavanie kariet medzi študentmi predstavuje nekontrolnú formu zneužitia, ktorú nie je možné úplne eliminovať technickými prostriedkami.
+
+\subsection{Ochranné opatrenia}
+
+Využitie šifrovanej komunikácie prostredníctvom technológie DESFire výrazne znižuje riziko klonovania a odpočúvania. Implementácia mechanizmu anti-passback zabraňuje opakovanému použitiu tej istej karty v krátkom časovom intervale. Kombinácia s doplnkovým overením, napríklad verifikáciou prostredníctvom IP adresy siete v učebni, zvyšuje spoľahlivosť systému.
+
+\section{Zdôvodnenie zvoleného prístupu}
+
+Na základe vykonanej analýzy existujúcich metód a dostupných technológií sme sa rozhodli pre implementáciu systému založeného na technológii RFID/NFC s využitím študentských kariet ISIC.
+
+Tento prístup ponúka optimálnu rovnováhu medzi spoľahlivosťou identifikácie, nákladmi na implementáciu a ochranou súkromia študentov. Študenti už vlastnia a používajú karty ISIC, čo eliminuje potrebu dodatočných identifikačných prostriedkov. Hardvérové komponenty vrátane mikrokontroléra ESP8266/ESP12-F a NFC čítačky PN532 sú cenovo dostupné a umožňujú vytvorenie funkčného prototypu s minimálnymi nákladmi.
+
+Softvérová architektúra postavená na webovej aplikácii s REST API a komunikáciou prostredníctvom protokolu MQTT zabezpečuje flexibilitu, škálovateľnosť a možnosť budúceho rozšírenia systému. Export údajov v štandardných formátoch umožňuje integráciu s existujúcimi akademickými systémami bez potreby priamej technickej väzby.
+
+\section{Zhrnutie analýzy}
+
+Analýza súčasného stavu evidencie dochádzky na vysokých školách identifikovala zásadné nedostatky manuálnych metód vrátane časovej náročnosti, chybovosti a náchylnosti na zneužitie. Moderné alternatívy založené na QR kódoch alebo biometrii majú vlastné obmedzenia súvisiace s technickými požiadavkami, nákladmi alebo ochranou súkromia.
+
+Technológia RFID/NFC v kombinácii s už existujúcimi študentskými kartami ISIC predstavuje vyvážené riešenie, ktoré minimalizuje bariéry prijatia zo strany používateľov a umožňuje automatizáciu procesu evidencie pri zachovaní primeraných nákladov a súladu s požiadavkami na ochranu osobných údajov.
+
+Navrhovaný systém reflektuje výsledky tejto analýzy a zameriava sa na vytvorenie prakticky využiteľného prototypu, ktorý demonštruje životaschopnosť zvoleného prístupu v akademickom prostredí.
