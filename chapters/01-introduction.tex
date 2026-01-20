@@ -2,10 +2,26 @@
 
 \chapter{Úvod}\label{ch:introduction}
 
-Úvod práce stručne opisuje stanovený problém, kontext problému a motiváciu pre riešenie problému. Z úvodu by malo byť jasné, že stanovený problém doposiaľ nie je vyriešený a má zmysel ho riešiť.
+Evidencia účasti študentov na vyučovaní predstavuje neoddeliteľnú súčasť vzdelávacieho procesu na vysokých školách. Sledovanie dochádzky slúži nielen na administratívne účely, ale zohráva kľúčovú úlohu pri hodnotení zapojenia študentov do výučby, identifikácii potenciálnych problémov a v konečnom dôsledku ovplyvňuje celkový akademický úspech študentov. Výskumy jednoznačne potvrdzujú silný vzťah medzi pravidelnou účasťou na vyučovaní a dosiahnutými študijnými výsledkami.
 
-V úvode neuvádzajte štruktúru práce, t.j. o čom je ktorá kapitola. Rozsah úvodu je minimálne 2 celé strany (vrátane formulácie úlohy).
+Napriek významu evidencie dochádzky sa na mnohých slovenských univerzitách naďalej využívajú tradičné manuálne metódy založené na podpisových hárkoch alebo prezentačnom volaní mien. Tieto prístupy sú časovo náročné, pričom proces evidencie môže zabrať 5 až 15 minút z vyučovacej hodiny v závislosti od veľkosti skupiny. Manuálna evidencia je zároveň náchylná na chyby vznikajúce v dôsledku nečitateľných podpisov, nesprávneho zápisu alebo straty dokumentov. Najzávažnejším problémom zostáva možnosť zneužitia, keď študenti podpisujú hárok za neprítomných spolužiakov, čo znehodnocuje účel celého procesu.
+
+Moderné technológie ponúkajú riešenia, ktoré môžu tieto nedostatky eliminovať. Rádiofrekvenčná identifikácia (RFID) a komunikácia na krátku vzdialenosť (NFC) umožňujú bezkontaktnú identifikáciu osôb prostredníctvom čipových kariet. Študentské karty ISIC vydávané na slovenských univerzitách už obsahujú RFID/NFC čip, čo vytvára príležitosť na implementáciu automatizovaného systému evidencie dochádzky bez potreby dodatočných identifikačných prostriedkov.
+
+Predkladaný tímový projekt sa zameriava na návrh a implementáciu prototypu evidenčného systému, ktorý využíva existujúcu infraštruktúru študentských kariet ISIC na automatizovaný záznam účasti študentov na vyučovaní. Systém kombinuje hardvérové riešenie vo forme RFID čítacieho zariadenia s webovou aplikáciou pre správu a spracovanie údajov o dochádzke. 
 
 \section*{Formulácia úlohy}
 
-V rámci úvodu tiež vysvetlite vaše chápanie úlohy, ktorú budete riešiť. Prvú verziu tejto časti by ste mali napísať čo najskôr, aby ste sa uistili, že rozumiete, čo je cieľom vašej práce, a prekonzultovali ju so školiteľom. Neskôr v priebehu práce na projekte ju môžete spresňovať a dopĺňať.
+Témou tímového projektu je \textbf{Systém na evidenciu účasti študentov na hodinách}. Oficiálne zadanie úlohy definuje nasledovné požiadavky:
+
+Cieľom projektu je navrhnúť a implementovať prototyp evidenčného systému účasti študentov na hodinách (cvičeniach/prednáškach). Samotná identifikácia príchodu študenta má byť založená na RFID pomocou preukazov ISIC. Okrem evidovania účasti má byť systém schopný zabezpečiť manipuláciu (import, export, konverzia a podobne) s údajmi medzi AIS a vyvíjaným systémom. Súčasťou projektu je okrem softvérového návrhu (webová aplikácia) aj hardvérový návrh (Arduino, wifi, RFID).
+
+Zadanie definuje štyri hlavné úlohy:
+\begin{enumerate}
+    \item Analyzovať problematiku RFID technológie a výmenných formátov akademického informačného systému.
+    \item Navrhnúť vhodnú architektúru systému zo softvérového a hardvérového hľadiska.
+    \item Implementovať navrhovaný systém.
+    \item Verifikovať funkčnosť implementovaného systému.
+\end{enumerate}
+
+Z formulácie zadania vyplýva, že výsledkom projektu má byť funkčný prototyp pozostávajúci z dvoch vzájomne prepojených častí. Hardvérová časť zahŕňa návrh a realizáciu zariadenia založeného na mikrokontroléri s podporou WiFi pripojenia a RFID/NFC komunikácie, ktoré bude schopné čítať údaje zo študentských kariet ISIC a odosielať ich na centrálny server. Softvérová časť pozostáva z webovej aplikácie, ktorá zabezpečí spracovanie prijatých údajov, ich ukladanie do databázy, správu používateľov a kurzov a prípravu dát na export do akademického informačného systému.
