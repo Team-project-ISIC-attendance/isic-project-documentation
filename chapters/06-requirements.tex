@@ -1,0 +1,61 @@
+\chapter{Špecifikácia požiadaviek a use-case scenáre}
+\label{chap:requirements-usecases}
+
+Táto kapitola špecifikuje funkčné a nefunkčné požiadavky systému \textit{ISIC Attendance}. Systém slúži na evidenciu účasti študentov na cvičeniach/prednáškach pomocou priloženia ISIC karty k čítačke.
+
+\section{Funkčné požiadavky}
+\label{sec:functional-requirements}
+
+Funkčné požiadavky definujú, čo má systém robiť a aké služby poskytuje jednotlivým používateľom.
+
+\begin{enumerate}
+    \item \textbf{Načítanie identifikátora z ISIC karty.}  
+    Systém musí vedieť načítať unikátny identifikátor z ISIC karty (NFC/RFID) pomocou hardvéru a tento identifikátor ďalej spracovať.
+
+    \item \textbf{Identifikácia študenta.}  
+    Po načítaní identifikátora systém vyhľadá príslušného študenta v evidencii. V prípade, že identifikátor nie je priradený žiadnemu študentovi, systém túto situáciu vyhodnotí ako neúspešnú.
+
+    \item \textbf{Zaznamenanie účasti na konkrétnej hodine.}  
+    Po úspešnej identifikácii študenta systém vytvorí záznam o účasti viazaný na konkrétnu hodinu (dátum, čas, predmet/skupina alebo iný identifikátor hodiny).
+
+    \item \textbf{Kontrola duplicít.}  
+    Systém pred vytvorením záznamu overí, či už študent nie je na danej hodine evidovaný ako prítomný, aby nedochádzalo k duplicite.
+
+    \item \textbf{Overenie aktívnej hodiny (okna registrácie).}  
+    Systém musí vedieť rozlíšiť, či je v danom čase aktívna hodina. Ak registrácia nie je povolená, systém nezapíše účasť.
+
+    \item \textbf{Spätná väzba pre študenta na mieste.}  
+    Po priložení karty systém poskytne okamžitú informáciu o výsledku operácie (úspech/neúspech). Forma spätnej väzby --- LED.
+
+    \item \textbf{Prehľad účasti pre vyučujúceho.}  
+    Vyučujúci má mať k dispozícii prehľad študentov, ktorí sa na hodinu zaregistrovali, a základnú štatistiku.
+
+    \item \textbf{Uloženie dát do trvalého úložiska.}  
+    Záznamy o účasti musia byť ukladané tak, aby boli dostupné aj po reštarte systému.
+
+    \item \textbf{Export výsledkov.}  
+    Systém umožní exportovať výsledky (napr. zoznam prítomných) do formátu vhodného na ďalšie spracovanie.
+
+    \end{enumerate}
+
+\section{Nefunkčné požiadavky}
+\label{sec:nonfunctional-requirements}
+
+Nefunkčné požiadavky definujú kvalitatívne vlastnosti systému, teda ako dobre má systém fungovať.
+
+\begin{enumerate}
+    \item \textbf{Spoľahlivosť a odolnosť voči chybám.}  
+    Systém má korektne reagovať na typické problémové situácie, ako je opakované priloženie karty, neúspešné načítanie identifikátora, alebo dočasná nedostupnosť backendu (ak je použité sieťové riešenie). V prípade chyby musí byť stav jednoznačný a zrozumiteľný.
+
+    \item \textbf{Integrita dát.}  
+    Systém má zabezpečiť konzistentnosť údajov: pre jedného študenta a jednu hodinu sa má evidovať najviac jeden záznam účasti.
+
+    \item \textbf{Bezpečnosť a prístupové práva.}  
+    Údaje o účasti predstavujú osobné údaje. Prístup k prehľadom a exportom má byť obmedzený na oprávnené roly (vyučujúci, administrátor). Systém nemá zverejňovať osobné údaje nepovolaným osobám.
+
+    \item \textbf{Udržiavateľnosť.}  
+    Softvérová časť má byť navrhnutá tak, aby bolo možné systém rozširovať bez zásahov do celej architektúry.
+
+    \item \textbf{Logovanie a diagnostika.}  
+    Systém má uchovávať záznamy o dôležitých udalostiach (načítanie karty, úspešný/neúspešný zápis, dôvody zamietnutia), čo umožní jednoduchšie odhalenie problémov pri prevádzke.
+\end{enumerate}
