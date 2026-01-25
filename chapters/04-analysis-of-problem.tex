@@ -210,6 +210,127 @@ Tento prístup ponúka optimálnu rovnováhu medzi spoľahlivosťou identifikác
 
 Softvérová architektúra postavená na webovej aplikácii s REST API a komunikáciou prostredníctvom protokolu MQTT zabezpečuje flexibilitu, škálovateľnosť a možnosť budúceho rozšírenia systému. Export údajov v štandardných formátoch umožňuje integráciu s existujúcimi akademickými systémami bez potreby priamej technickej väzby.
 
+\section{Návrh dátového modelu}
+
+Na základe analýzy požiadaviek na systém evidencie dochádzky sme navrhli dátový model, ktorý pokrýva všetky základné potreby kompletného systému. Model pozostáva zo šiestich hlavných entít: User, Student, Subject, Room, Session a Attendance.
+
+\subsection{Entita User}
+
+Entita User reprezentuje používateľa systému -- vyučujúceho alebo administrátora:
+
+\begin{itemize}
+    \item \texttt{id} -- primárny kľúč, automaticky generovaný identifikátor záznamu
+    \item \texttt{email} -- emailová adresa používateľa (UNIQUE), slúži ako prihlasovacie meno
+    \item \texttt{password\_hash} -- zahašované heslo používateľa
+    \item \texttt{role} -- rola používateľa v systéme (teacher, admin)
+    \item \texttt{first\_name} -- krstné meno používateľa
+    \item \texttt{last\_name} -- priezvisko používateľa
+    \item \texttt{created\_at} -- časová značka vytvorenia záznamu
+\end{itemize}
+
+Rozlíšenie rolí umožňuje implementáciu rôznych úrovní prístupu: administrátori majú plný prístup k správe systému, zatiaľ čo vyučujúci majú prístup len k svojim predmetom a hodinám.
+
+\subsection{Entita Student}
+
+Entita Student reprezentuje študenta identifikovaného prostredníctvom karty ISIC:
+
+\begin{itemize}
+    \item \texttt{id} -- primárny kľúč, automaticky generovaný identifikátor záznamu
+    \item \texttt{isic\_uid} -- jedinečný identifikátor čipu karty ISIC (UNIQUE, INDEX)
+    \item \texttt{first\_name} -- krstné meno študenta
+    \item \texttt{last\_name} -- priezvisko študenta
+    \item \texttt{email} -- emailová adresa študenta
+    \item \texttt{created\_at} -- časová značka vytvorenia záznamu
+\end{itemize}
+
+Atribút \texttt{isic\_uid} je indexovaný pre rýchle vyhľadávanie pri skenovaní karty. Osobné údaje môžu byť doplnené neskôr prostredníctvom administračného rozhrania alebo importom zo študentského informačného systému.
+
+\subsection{Entita Subject}
+
+Entita Subject reprezentuje vyučovaný predmet:
+
+\begin{itemize}
+    \item \texttt{id} -- primárny kľúč
+    \item \texttt{code} -- kód predmetu (napr. ``TP1'', ``ZPRO'')
+    \item \texttt{name} -- názov predmetu
+    \item \texttt{created\_at} -- časová značka vytvorenia záznamu
+\end{itemize}
+
+\subsection{Entita Room}
+
+Entita Room reprezentuje učebňu alebo miestnosť, kde prebieha výučba:
+
+\begin{itemize}
+    \item \texttt{id} -- primárny kľúč
+    \item \texttt{name} -- názov alebo číslo miestnosti (napr. ``PK6-108'')
+    \item \texttt{building} -- budova, v ktorej sa miestnosť nachádza
+    \item \texttt{device\_id} -- identifikátor hardvérového zariadenia (čítačky) v miestnosti
+\end{itemize}
+
+\subsection{Entita Session}
+
+Entita Session reprezentuje konkrétnu vyučovaciu hodinu:
+
+\begin{itemize}
+    \item \texttt{id} -- primárny kľúč
+    \item \texttt{subject\_id} -- cudzí kľúč odkazujúci na predmet
+    \item \texttt{room\_id} -- cudzí kľúč odkazujúci na miestnosť
+    \item \texttt{teacher\_id} -- cudzí kľúč odkazujúci na vyučujúceho (User)
+    \item \texttt{scheduled\_start} -- plánovaný začiatok hodiny
+    \item \texttt{scheduled\_end} -- plánovaný koniec hodiny
+    \item \texttt{status} -- stav hodiny (plánovaná, aktívna, ukončená, zrušená)
+\end{itemize}
+
+\subsection{Entita Attendance}
+
+Entita Attendance reprezentuje záznam o účasti študenta na vyučovaní:
+
+\begin{itemize}
+    \item \texttt{id} -- primárny kľúč
+    \item \texttt{student\_id} -- cudzí kľúč odkazujúci na študenta
+    \item \texttt{session\_id} -- cudzí kľúč odkazujúci na vyučovaciu hodinu
+    \item \texttt{scan\_timestamp} -- časová značka skenovania karty
+    \item \texttt{status} -- stav účasti (prítomný, meškajúci, ospravedlnený, neprítomný)
+    \item \texttt{created\_at} -- časová značka vytvorenia záznamu v databáze
+\end{itemize}
+
+Rozlíšenie medzi atribútmi \texttt{scan\_timestamp} a \texttt{created\_at} umožňuje korektné spracovanie situácií, kedy je záznam vytvorený s oneskorením (napríklad pri offline režime zariadenia).
+
+\subsection{Vzťahy medzi entitami}
+
+Obrázok \ref{fig:er-diagram} zobrazuje ER diagram navrhnutého dátového modelu so všetkými vzťahmi.
+
+\begin{figure}[!ht]
+    \centering
+    \includegraphics[width=0.95\textwidth]{figures/er-diagram.png}
+    \caption{ER diagram databázového modelu systému evidencie dochádzky}
+    \label{fig:er-diagram}
+\end{figure}
+
+Medzi entitami existujú nasledujúce vzťahy typu 1:N (one-to-many):
+
+\begin{itemize}
+    \item \textbf{User -- Session}: Jeden vyučujúci môže viesť veľa vyučovacích hodín
+    \item \textbf{Subject -- Session}: Jeden predmet môže mať veľa vyučovacích hodín
+    \item \textbf{Room -- Session}: Jedna miestnosť môže hostiť veľa vyučovacích hodín
+    \item \textbf{Student -- Attendance}: Jeden študent môže mať veľa záznamov o dochádzke
+    \item \textbf{Session -- Attendance}: Jedna vyučovacia hodina môže mať veľa záznamov o dochádzke
+\end{itemize}
+
+Kombinácia cudzích kľúčov \texttt{student\_id} a \texttt{session\_id} v tabuľke Attendance je jedinečná (UNIQUE constraint), čo zabraňuje duplicitným záznamom o účasti toho istého študenta na tej istej hodine.
+
+\subsection{Výhody navrhnutého modelu}
+
+Navrhnutý dátový model má niekoľko výhod:
+
+\begin{itemize}
+    \item \textbf{Kompletnosť} -- model pokrýva všetky aspekty evidencie dochádzky vrátane správy používateľov, predmetov, miestností a vyučovacích hodín
+    \item \textbf{Normalizácia} -- štruktúra je v tretej normálnej forme (3NF), čo eliminuje redundanciu údajov
+    \item \textbf{Flexibilita} -- model umožňuje sledovanie dochádzky na úrovni jednotlivých hodín s možnosťou rozlíšenia stavu účasti
+    \item \textbf{Auditovateľnosť} -- časové značky umožňujú sledovanie histórie záznamov a detekciu anomálií
+    \item \textbf{Integrita} -- cudzí kľúče a jedinečné obmedzenia zabezpečujú konzistenciu údajov
+\end{itemize}
+
 \section{Zhrnutie analýzy}
 
 Analýza súčasného stavu evidencie dochádzky na vysokých školách identifikovala zásadné nedostatky manuálnych metód vrátane časovej náročnosti (10 až 15 minút na hodinu), chybovosti (15 až 20 percent) a náchylnosti na zneužitie. Moderné alternatívy založené na QR kódoch alebo biometrii majú vlastné obmedzenia súvisiace s technickými požiadavkami, nákladmi alebo ochranou súkromia.
