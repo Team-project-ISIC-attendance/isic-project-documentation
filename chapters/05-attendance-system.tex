@@ -1,13 +1,164 @@
 \chapter{Ako funguje ISIC Attendance System}
 
-Táto kapitola stručne vysvetľuje princíp fungovania prototypu ISIC Attendance System z pohľadu architektúry a spracovania údajov. Cieľom je opísať, akým spôsobom systém prepája fyzickú identifikáciu študenta pomocou ISIC karty s digitálnym záznamom dochádzky, ktorý je následne dostupný vo webovej aplikácii.
+Táto kapitola popisuje architektúru a tok údajov v prototypovom systéme ISIC Attendance System. Zameriava sa na prepojenie fyzickej identifikácie študenta pomocou ISIC karty s digitálnym záznamom dochádzky, ktorý je následne sprístupnený vo webovej aplikácii. Text je písaný s dôrazom na jasné oddelenie komponentov a ich zodpovedností.
 
 \section{Hlavné komponenty systému}
 
-Systém je navrhnutý ako modulárne riešenie pozostávajúce z troch častí: hardvérového zariadenia v učebni, serverovej časti a webového rozhrania. Jednotlivé komponenty spolu komunikujú tak, aby bolo možné spoľahlivo zachytiť udalosť priloženia karty, preniesť ju cez sieť, spracovať na serveri a uložiť do databázy.
+Riešenie je navrhnuté modulárne a pozostáva z hardvérového zariadenia v učebni, serverovej časti a webového rozhrania. Komponenty sú prepojené tak, aby bol zber udalostí spoľahlivý, prenos efektívny a ukladanie údajov konzistentné.
 
 \subsection{Hardware: zariadenie v učebni}
-Na evidenciu prítomnosti sa v učebni, kde je potrebné zaznamenávať dochádzku, umiestni kompaktné zariadenie s RFID/NFC čítačkou. V rámci prototypu je hardvérová časť postavená na mikrokontroléri \textit{ESP8266 / ESP12-F} a NFC čítačke \textit{PN532}. Zariadenie sa pripája do lokálnej Wi-Fi siete a odosiela udalosti na server. Na prenos správ sa využíva protokol \textit{MQTT}, ktorý je vhodný pre scenáre s väčším počtom zariadení a častými udalosťami, keďže umožňuje ľahkú a rýchlu výmenu dát.
+V každej učebni je umiestnené kompaktné zariadenie s RFID/NFC čítačkou určené na evidenciu prítomnosti. Prototyp je postavený na mikrokontroléri \textit{ESP8266 / ESP-12F} a NFC module \textit{PN532}. Zariadenie sa pripája do lokálnej Wi-Fi siete a odosiela udalosti na server prostredníctvom protokolu \textit{MQTT}, ktorý je vhodný pre scenáre s väčším počtom zariadení a častými udalosťami.
+
+\subsubsection{Zoznam súčiastok a napájanie}
+Zariadenie je navrhnuté ako jednoduchý IoT uzol s NFC čítačkou a bezdrôtovou komunikáciou. Z pohľadu hardvéru prototyp obsahuje najmä:
+\begin{itemize}
+  \item modul \textit{ESP-12F (ESP8266)} ako hlavná riadiaca jednotka,
+  \item modul \textit{PN532} na čítanie NFC/RFID kariet (ISIC),
+  \item napájanie \textbf{3,3~V} (v prototypovej verzii uvažované ako batériový zdroj 3,3~V),
+  \item indikačné prvky (LED + bzučiak/piezo) pre spätnú väzbu používateľovi,
+  \item mechanické časti (kryt, konektory, prepojovacie vodiče).
+\end{itemize}
+
+Keďže \textit{ESP-12F} pracuje výhradne s logikou 3,3~V, napájanie 3,3~V umožňuje pripojiť modul \textit{PN532} bez potreby úrovňových prevodníkov a zjednodušuje zapojenie.
+
+\subsubsection{Prepojenie PN532 a ESP-12F}
+Komunikácia medzi \textit{ESP-12F} a čítačkou \textit{PN532} je v prototypovej implementácii realizovaná cez zbernicu \textit{SPI} (HSPI na ESP8266). Tento spôsob umožňuje stabilnú komunikáciu a zároveň zodpovedá použitej implementácii firmvéru.
+
+\begin{table}[h!]
+  \centering
+  \caption{Navrhované prepojenie PN532 s ESP-12F (SPI)}
+  \label{tab:pn532-esp12f-wiring}
+  \begin{tabular}{ll}
+    \toprule
+    PN532 & ESP-12F (ESP8266) \\
+    \midrule
+    VCC (3,3~V) & 3,3~V \\
+    GND & GND \\
+    SCK & GPIO14 \\
+    MISO & GPIO12 \\
+    MOSI & GPIO13 \\
+    SS/CS & GPIO5 \\
+    IRQ & GPIO4 \\
+    RSTO (voliteľné) & reset (alebo voľný GPIO) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+V prototypovej fáze je pre funkčnosť čítania potrebné prepojenie napájania, zeme a SPI signálov (SCK/MOSI/MISO/CS). Pin \textit{IRQ} je v aktuálnej implementácii použitý pre signalizáciu udalosti z čítačky (predvolene GPIO4) a \textit{RSTO} je voliteľný (najmä pre hardvérový reset alebo pri pokročilejších režimoch šetrenia energie).
+
+\subsubsection{Prepojenie LED a bzučiaka}
+Spätná väzba pre používateľa je realizovaná cez \texttt{FeedbackService}, pričom konkrétne piny sú konfigurovateľné (\texttt{FeedbackConfig}). V prototypovej verzii bez kolízie so SPI je použité nasledujúce zapojenie:
+\begin{itemize}
+  \item \textbf{LED}: GPIO2 (D4) -- často je k dispozícii vstavaná LED (aktívna LOW),
+  \item \textbf{Bzučiak}: GPIO15 (D8) -- zapojenie cez tranzistor a odpor; pin musí byť pri štarte v stave LOW.
+\end{itemize}
+
+\begin{table}[h!]
+  \centering
+  \caption{Zapojenie indikačných prvkov (ESP-12F)}
+  \label{tab:feedback-wiring}
+  \begin{tabular}{lll}
+    \toprule
+    Prvok & ESP-12F (ESP8266) & Poznámka \\
+    \midrule
+    LED (status) & GPIO2 (D4) & aktívna LOW, často vstavaná LED \\
+    Bzučiak & GPIO15 (D8) & cez tranzistor; dodržať LOW pri boote \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsubsection{Schéma zapojenia a fotodokumentácia}
+Na obrázku~\ref{fig:hw-prototype} je vyhradené miesto pre schému zapojenia alebo fotodokumentáciu prototypu. Obrázok bude doplnený podľa finálneho fyzického zapojenia.
+
+\begin{figure}[h!]
+  \centering
+  \includegraphics[width=0.9\textwidth]{figures/circuit_image.png}
+  \caption{Hardvérové zapojenie prototypu (doplní sa)}
+  \label{fig:hw-prototype}
+\end{figure}
+
+\subsubsection{Firmvér zariadenia (\texttt{isic-project-hardware})}
+Softvérová časť hardvérového zariadenia (firmvér pre ESP8266/ESP-12F) je implementovaná v samostatnom repozitári \texttt{isic-project-hardware}. Projekt je určený na kompiláciu cez \textit{PlatformIO} (Arduino framework) a používa štandard \textit{C++17} (viď \texttt{platformio.ini}).
+
+Z pohľadu štruktúry kódu:
+\begin{itemize}
+  \item vstupný bod firmvéru je v súbore \texttt{src/main.cpp} (funkcie \texttt{setup()} a \texttt{loop()}),
+  \item trieda \texttt{App} (\texttt{src/App.cpp}) inicializuje a koordinuje jednotlivé služby,
+  \item služby sú implementované v \texttt{src/services/} a komunikujú nepriamo cez \texttt{EventBus} (publish/subscribe), čo znižuje väzby medzi modulmi.
+\end{itemize}
+
+Kľúčové služby firmvéru:
+\begin{itemize}
+  \item \texttt{Pn532Service} -- čítanie NFC kariet cez SPI a generovanie udalosti \textit{CardScanned},
+  \item \texttt{WiFiService} a \texttt{MqttService} -- pripojenie do siete a odosielanie udalostí na broker,
+  \item \texttt{AttendanceService} -- debouncing, prípadné dávkovanie udalostí a offline buffer,
+  \item \texttt{ConfigService} -- načítanie/uloženie konfigurácie (napr.\ LittleFS) a zmena nastavení za behu,
+  \item \texttt{OtaService} -- OTA aktualizácie firmvéru,
+  \item \texttt{HealthService} -- diagnostika a zdravotný stav komponentov,
+  \item \texttt{PowerService} -- riadenie úsporných režimov,
+  \item \texttt{FeedbackService} -- LED/bzučiak pre spätnú väzbu používateľovi.
+\end{itemize}
+
+Konfigurácia zapojenia PN532 (SPI piny a IRQ) je v kóde reprezentovaná štruktúrou \texttt{Pn532Config} v súbore \texttt{include/common/Config.hpp}; tabuľka~\ref{tab:pn532-esp12f-wiring} zodpovedá predvolenému nastaveniu pre platformu ESP8266.
+
+\subsubsection{Detailnejšia schéma firmvéru (vrstvy a služby)}
+Prehľad firmvéru je rozdelený do vrstiev podobne ako v podnikových systémoch. Vrstvy sú oddelené tak, aby bolo možné jednoducho udržiavať kód, testovať jednotlivé časti a bezpečne rozširovať funkcionalitu bez zásahov do celého systému.
+
+\begin{figure}[h!]
+  \centering
+  \begin{minipage}{\textwidth}
+  {\scriptsize\begin{verbatim}
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              APPLICATION LAYER                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │                                App                                    │  │
+│  │         Main coordinator • Service lifecycle • Task setup             │  │
+│  └───────────────────────────────────┬───────────────────────────────────┘  │
+├──────────────────────────────────────┼──────────────────────────────────────┤
+│                              SERVICE LAYER                                  │
+├──────────────────────────────────────┼──────────────────────────────────────┤
+│                                      ▼                                      │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │                           EventBus                                    │  │
+│  │           Signal/Slot pub/sub • Type-safe events • RAII connections   │  │
+│  └───────────────────────────────────┬───────────────────────────────────┘  │
+│          ┌───────────┬───────────┬───┴───┬───────────┬───────────┐          │
+│          ▼           ▼           ▼       ▼           ▼           ▼          │
+│  ┌─────────────┐ ┌─────────┐ ┌────────┐ ┌─────────┐ ┌─────────┐ ┌────────┐  │
+│  │ConfigService│ │  WiFi   │ │  MQTT  │ │   OTA   │ │PN532    │ │Feedback│  │
+│  │• LittleFS   │ │ Service │ │Service │ │ Service │ │Service  │ │Service │  │
+│  │• JSON parse │ │• AP mode│ │• Queue │ │• Elegant│ │• SPI    │ │• LED   │  │
+│  └─────────────┘ └─────────┘ └────────┘ └─────────┘ └─────────┘ └────────┘  │
+│          │                       │           │           │                  │
+│          ▼                       ▼           ▼           ▼                  │
+│  ┌─────────────────────┐  ┌─────────────────────┐  ┌─────────────────────┐  │
+│  │  AttendanceService  │  │    HealthService    │  │    PowerService     │  │
+│  │  • Debounce/batch   │  │  • Component checks │  │  • Sleep modes      │  │
+│  │  • Offline buffer   │  │  • MQTT reporting   │  │  • Signal-based     │  │
+│  └─────────────────────┘  └─────────────────────┘  └─────────────────────┘  │
+│                                                                             │
+│                           ┌─────────────────────┐                           │
+│                           │   TaskScheduler     │                           │
+│                           │  • Cooperative      │                           │
+│                           │  • Non-blocking     │                           │
+│                           └─────────────────────┘                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                              HARDWARE LAYER                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐       │
+│  │   SPI    │  │   WiFi   │  │ LittleFS │  │   GPIO   │  │  Flash   │       │
+│  │  (PN532) │  │ (MQTT)   │  │ (Config) │  │(LED/Buzz)│  │  (OTA)   │       │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘  └──────────┘       │
+└─────────────────────────────────────────────────────────────────────────────┘
+  \end{verbatim}}
+  \end{minipage}
+  \caption{Vrstvová schéma firmvéru zariadenia}
+  \label{fig:firmware-layered}
+\end{figure}
+
+\subsubsection{Tok udalostí v rámci firmvéru}
+Vstupná udalosť (sken karty) sa publikuje cez \textbf{EventBus} do \texttt{AttendanceService}, kde sa uplatní debounce a prípadné dávkovanie. Následne ju \texttt{MqttService} publikuje do brokeru. Konfigurácia sa spracúva cez \texttt{ConfigService} a stav zariadenia je pravidelne reportovaný službou \texttt{HealthService}. Táto architektúra umožňuje pridávať nové služby (napr.\ lokálne logovanie alebo ďalšie integračné výstupy) bez zásahu do existujúceho kódu.
 
 \subsection{Backend: server a databáza}
 Serverová časť je realizovaná ako serverová služba s \textit{REST API} a podporou prijímania udalostí z hardvérových zariadení cez \textit{MQTT}. V projekte sa používajú open-source technológie, najmä \textit{Python}, a taktiež kontajnerizácia pomocou \textit{Docker}, ktorá zjednodušuje nasadenie systému a zaručuje reprodukovateľnosť prostredia.
@@ -32,6 +183,80 @@ Hlavné funkcie rozhrania:
   \item prehľad dochádzky podľa hodín alebo skupín,
   \item export výsledkov do požadovaných formátov na ďalšie spracovanie alebo prenos.
 \end{itemize}
+
+\subsection{Architektonický návrh a interakcie komponentov}
+Z hľadiska prevádzky je systém rozdelený na \textbf{zariadenie v učebni} (čítanie karty), \textbf{komunikačnú vrstvu} (Wi-Fi a MQTT), \textbf{serverovú logiku} (spracovanie udalostí a REST API), \textbf{databázu} (perzistencia) a \textbf{webové rozhranie} (správa a reporting). Pre prehľadnosť je základné prepojenie komponentov znázornené na obrázku~\ref{fig:attendance-architecture}.
+
+\begin{figure}[h!]
+  \centering
+  {\setlength{\fboxsep}{6pt}%
+  \begin{tabular}{c}
+    \fbox{\parbox{0.9\textwidth}{\centering
+      \textbf{Zariadenie v učebni} (ESP-12F + PN532 + LED/bzučiak, 3,3~V)\\
+      čítanie UID karty, lokálna spätná väzba, vytvorenie udalosti \texttt{scan}
+    }}\\[4pt]
+    $\downarrow$\\[4pt]
+    \fbox{\parbox{0.9\textwidth}{\centering
+      \textbf{Wi-Fi + MQTT} (publish do témy, napr.\ \texttt{\{base\_topic\}/\{deviceId\}/attendance})
+    }}\\[4pt]
+    $\downarrow$\\[4pt]
+    \fbox{\parbox{0.9\textwidth}{\centering
+      \textbf{MQTT broker} (napr.\ Mosquitto)
+    }}\\[4pt]
+    $\downarrow$\\[4pt]
+    \fbox{\parbox{0.9\textwidth}{\centering
+      \textbf{Backend} (MQTT subscriber + REST API)\\
+      spracovanie udalostí, REST API pre webové rozhranie
+    }}\\[4pt]
+    $\downarrow$\\[4pt]
+    \fbox{\parbox{0.9\textwidth}{\centering
+      \textbf{Databáza} (kurzy, rozvrh hodín, karty, záznamy dochádzky)
+    }}\\
+  \end{tabular}}
+  \caption{Architektúra a prepojenie komponentov systému}
+  \label{fig:attendance-architecture}
+\end{figure}
+
+Hardvérové zariadenie nevykonáva komplexnú aplikačnú logiku (napr.\ mapovanie karty na študenta alebo vyhodnotenie, ku ktorej hodine sken patrí). Jeho úlohou je \textbf{spoľahlivo zachytiť udalosť} a odoslať ju do komunikačnej vrstvy. Všetky rozhodnutia, validácie a zápisy do databázy sa vykonávajú na serveri, čo zjednodušuje správu viacerých zariadení a umožňuje centralizované zmeny pravidiel.
+
+\section{Návrh dátového modelu (databáza / entity)}
+Táto časť sumarizuje logický návrh databázy, t.\ j.\ aké entity systém potrebuje a aké vzťahy medzi nimi existujú. Návrh je zameraný na akademický kontext (kurzy, hodiny, študenti) a na väzbu medzi fyzickou kartou a digitálnym záznamom dochádzky.
+
+\subsection{Entity}
+Základné entity a ich kľúčové atribúty:
+\begin{itemize}
+  \item \textbf{User} (\textit{user\_id}, meno, email, rola) -- študent, vyučujúci alebo administrátor.
+  \item \textbf{Card} (\textit{card\_id}, \textit{uid}, typ, aktívna, \textit{user\_id}) -- ISIC karta priradená používateľovi.
+  \item \textbf{Course} (\textit{course\_id}, kód, názov, semester) -- predmet/kurz.
+  \item \textbf{Enrollment} (\textit{user\_id}, \textit{course\_id}, typ zápisu) -- prepojovacia entita pre vzťah mnoho--mnoho medzi študentmi a kurzami.
+  \item \textbf{Session} (\textit{session\_id}, \textit{course\_id}, učebňa, začiatok, koniec) -- konkrétna vyučovacia hodina (termín).
+  \item \textbf{Device} (\textit{device\_id}, učebňa, popis) -- fyzické zariadenie v učebni.
+  \item \textbf{AttendanceRecord} (\textit{record\_id}, \textit{session\_id}, \textit{user\_id}, \textit{card\_id}, \textit{device\_id}, čas, stav) -- výsledný záznam dochádzky.
+\end{itemize}
+
+\subsection{Vzťahy medzi entitami}
+Navrhované vzťahy (kardinality) medzi entitami:
+\begin{itemize}
+  \item \textbf{User 1..N Card}: používateľ môže mať viac kariet, karta patrí jednému používateľovi.
+  \item \textbf{User N..N Course} cez \textbf{Enrollment}: študenti sú zapísaní do viacerých kurzov, kurz má viac študentov.
+  \item \textbf{Course 1..N Session}: kurz sa skladá z viacerých vyučovacích hodín.
+  \item \textbf{Session 1..N AttendanceRecord}: na jednej hodine vzniká viac záznamov dochádzky.
+  \item \textbf{Device 1..N AttendanceRecord}: záznam obsahuje informáciu o zariadení, ktoré ho vytvorilo.
+\end{itemize}
+
+\begin{figure}[h!]
+  \centering
+  {\setlength{\fboxsep}{6pt}%
+  \fbox{\parbox{0.92\textwidth}{\centering
+    \textbf{Entity:} \texttt{User}, \texttt{Card}, \texttt{Course}, \texttt{Enrollment}, \texttt{Session}, \texttt{Device}, \texttt{AttendanceRecord}\\[2pt]
+    \textbf{Vzťahy:} \texttt{User 1..N Card}; \texttt{User N..N Course} (cez \texttt{Enrollment}); \texttt{Course 1..N Session};\\
+    \texttt{Session 1..N AttendanceRecord}; \texttt{Device 1..N AttendanceRecord}
+  }}}
+  \caption{Prehľad entít a vzťahov (ER model)}
+  \label{fig:attendance-erd}
+\end{figure}
+
+Z hľadiska konzistencie dát je vhodné uvažovať aj o obmedzeniach, napr.\ unikátnosť \textit{Card.uid} (jedno UID nemá byť evidované viackrát) a unikátnosť dvojice (\textit{session\_id}, \textit{user\_id}) v \textit{AttendanceRecord} (jeden študent má na jednej hodine najviac jeden výsledný záznam).
 
 \section{Ako prebieha zaznamenanie prítomnosti}
 
