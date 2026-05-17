@@ -1,0 +1,138 @@
+\chapter{Implementácia hardvérovej časti}
+\label{sec:hardware-implementation}
+
+Hardvérová časť systému \textit{ISIC Attendance} slúži na načítanie ISIC karty a odoslanie jej identifikátora do backendu. Zariadenie je navrhnuté ako samostatná čítačka, ktorá môže byť umiestnená v učebni. Študent priloží ISIC kartu k NFC modulu a zariadenie následne spracuje načítané UID karty.
+
+Ako riadiaca jednotka bol pôvodne plánovaný mikrokontrolér ESP12-F. Tento výber bol zvolený hlavne kvôli jeho dostupnosti, nízkej cene a nízkej spotrebe energie. Nízka spotreba bola dôležitá najmä preto, aby zariadenie pri napájaní z batérií vydržalo pracovať čo najdlhšie.
+
+Počas testovania sa však ukázalo, že ESP12-F má problém so stabilným pripojením k sieti eduroam. Pripojenie nebolo dostatočne spoľahlivé a pri reálnom použití by mohlo dochádzať k výpadkom komunikácie medzi čítačkou a backendom. Keďže stabilita pripojenia je pri dochádzkovom systéme dôležitá, bolo rozhodnuté použiť vývojovú dosku ESP32.
+
+Na čítanie kariet je použitý NFC modul PN532, ktorý komunikuje s mikrokontrolérom cez SPI rozhranie. Firmvér je implementovaný v jazyku C++ pomocou prostredia PlatformIO a Arduino frameworku.
+\section{Architektúra firmvéru}
+\label{subsec:firmware-architecture}
+
+Firmvér je navrhnutý modulárne, teda nie ako jeden veľký program v hlavnej slučke, ale ako súbor samostatných služieb. Každá služba má vlastnú zodpovednosť a rieši iba konkrétnu časť systému. Takýto návrh zlepšuje prehľadnosť kódu, zjednodušuje testovanie a uľahčuje ďalšie rozširovanie firmvéru.
+
+Hlavnú koordináciu zabezpečuje trieda \texttt{App}. Tá pri štarte inicializuje potrebné služby, nastavuje plánovač úloh a spúšťa web server. Pravidelné vykonávanie jednotlivých častí firmvéru zabezpečuje \texttt{TaskScheduler}. Vďaka tomu systém nemusí používať blokujúce čakanie a môže súčasne obsluhovať čítanie kariet, komunikáciu so serverom, spätnú väzbu aj diagnostiku.
+
+Na oddelenie jednotlivých častí systému sa používa centrálna udalostná zbernica \texttt{EventBus}. Služby si preto nemusia volať svoje metódy priamo, ale reagujú na udalosti. Napríklad po načítaní karty vytvorí \texttt{Pn532Service} udalosť \texttt{CardScanned}. Tú následne spracuje \texttt{AttendanceService}, ktorá pripraví dochádzkový záznam na odoslanie.
+
+Firmvér obsahuje tieto hlavné služby:
+\begin{enumerate}
+    \item \textbf{ConfigService} -- pracuje s konfiguráciou zariadenia,
+    \item \textbf{WiFiService} -- rieši Wi-Fi pripojenie a konfiguračný portál,
+    \item \textbf{MqttService} -- zabezpečuje komunikáciu s backendom,
+    \item \textbf{Pn532Service} -- obsluhuje NFC modul a čítanie kariet,
+    \item \textbf{AttendanceService} -- pripravuje dochádzkové záznamy,
+    \item \textbf{FeedbackService} -- ovláda spätnú väzbu pre používateľa,
+    \item \textbf{HealthService} -- sleduje stav zariadenia,
+    \item \textbf{OtaService} -- zabezpečuje vzdialenú aktualizáciu firmvéru,
+    \item \textbf{PowerService} -- rieši úsporné režimy.
+\end{enumerate}
+
+Podrobnejší opis najdôležitejších služieb je uvedený v nasledujúcich častiach, aby sa architektúra neopakovala s implementačnými detailmi.
+
+\section{Konfigurácia zariadenia}
+\label{subsec:hardware-configuration}
+
+Zariadenie používa konfiguračný systém, ktorý uchováva nastavenia pre jednotlivé časti firmvéru. Konfigurácia obsahuje napríklad nastavenia Wi-Fi siete, MQTT brokera, identifikátor zariadenia, nastavenia PN532 modulu, parametre dochádzky, spätnú väzbu, health monitoring, OTA aktualizácie a úsporný režim.
+
+Ak zariadenie ešte nemá nastavené pripojenie k Wi-Fi, môže spustiť vlastný access point a webový konfiguračný portál. Používateľ sa k nemu pripojí a cez webové rozhranie nastaví Wi-Fi sieť a MQTT broker. Po uložení konfigurácie sa zariadenie reštartuje a pokúsi sa pripojiť do nastavenej siete.
+
+Tento spôsob konfigurácie je praktický pri nasadzovaní zariadenia, pretože nie je potrebné meniť údaje priamo v zdrojovom kóde. Každá čítačka môže mať vlastné nastavenie, napríklad iný identifikátor zariadenia alebo inú miestnosť.
+
+\section{Načítanie ISIC karty}
+\label{subsec:card-reading}
+
+Na čítanie ISIC kariet slúži služba \texttt{Pn532Service}. Pri štarte firmvéru sa inicializuje NFC modul PN532 a overí sa jeho dostupnosť. Ak sa modul nepodarí nájsť, služba prejde do chybového stavu, ale zvyšok systému môže ďalej bežať. To je dôležité hlavne pre diagnostiku, pretože administrátor môže vidieť, že problém je v hardvérovej časti.
+
+Čítanie kariet je navrhnuté tak, aby bolo čo najspoľahlivejšie. Firmvér podporuje čítanie pomocou IRQ signálu, kde PN532 upozorní mikrokontrolér na prítomnosť karty. Ak IRQ režim nefunguje správne alebo sa objaví viacero chýb za sebou, systém vie prejsť do záložného režimu pomocou periodického pollingu. Vďaka tomu zariadenie nemusí úplne prestať fungovať pri probléme s IRQ signálom.
+
+Po úspešnom načítaní karty sa jej UID uloží do štruktúry udalosti a odošle sa do systému ako udalosť \texttt{CardScanned}. Samotný firmvér nerieši, či karta patrí konkrétnemu študentovi. Túto kontrolu vykonáva backend. Úlohou hardvéru je spoľahlivo načítať UID a doručiť ho do systému.
+
+\section{Spracovanie dochádzky vo firmvéri}
+\label{subsec:attendance-processing-firmware}
+
+Na spracovanie načítaných kariet slúži služba \texttt{AttendanceService}. Táto služba prijíma udalosti o načítaných kartách a vytvára z nich záznamy dochádzky. Jeden záznam obsahuje UID karty, časovú pečiatku a poradové číslo záznamu.
+
+Dôležitou časťou implementácie je ochrana proti opakovanému načítaniu tej istej karty. Študent môže kartu priložiť viackrát za sebou, napríklad preto, že si nie je istý, či bola karta načítaná. Firmvér preto používa debounce mechanizmus. Ak je rovnaká karta načítaná opakovane v krátkom časovom intervale, druhé načítanie sa ignoruje a nevytvorí sa nový záznam.
+
+Záznamy sa môžu odosielať jednotlivo alebo v dávkach. V konfigurácii je možné nastaviť veľkosť dávky a interval odosielania. Ak je dávkovanie vypnuté, záznam sa odošle hneď po načítaní karty. Tento prístup je vhodný pre dochádzkový systém, kde je dôležité rýchle spracovanie udalosti.
+
+\section{Offline režim}
+\label{subsec:hardware-offline-mode}
+
+Pri reálnom použití môže nastať situácia, že zariadenie stratí pripojenie k Wi-Fi alebo MQTT brokeru. V takom prípade by sa načítané karty nemali okamžite stratiť. Preto firmvér obsahuje offline buffer.
+
+Ak MQTT spojenie nie je dostupné, záznamy dochádzky sa ukladajú do lokálnej offline fronty. Po obnovení spojenia sa tieto záznamy znovu odošlú do backendu. Tým sa zvyšuje spoľahlivosť systému, pretože krátkodobý výpadok siete nemusí znamenať stratu dochádzky.
+
+Ak sa offline buffer zaplní, firmvér použije nastavenú politiku správania. Môže zahodiť najstarší záznam, ignorovať nový záznam alebo vyčistiť celý buffer. Táto časť je dôležitá hlavne pri dlhšom výpadku siete, keď zariadenie nemá možnosť odosielať údaje.
+
+\section{Komunikácia s backendom}
+\label{subsec:hardware-backend-communication}
+
+Komunikácia medzi hardvérovým zariadením a backendom je riešená pomocou protokolu MQTT. Každé zariadenie používa vlastný identifikátor a publikuje správy do tém, ktoré sú viazané na konkrétnu čítačku.
+
+Dochádzkové záznamy sa odosielajú do témy \texttt{attendance}. Záznamy sú vo formáte JSON a obsahujú najmä:
+\begin{enumerate}
+    \item \texttt{uid} -- identifikátor načítanej karty,
+    \item \texttt{ts} -- časová pečiatka,
+    \item \texttt{seq} -- poradové číslo záznamu.
+\end{enumerate}
+
+Okrem dochádzky zariadenie odosiela aj stavové informácie, health údaje a metriky. Backend tak môže sledovať, či je čítačka online, v akom stave sú jednotlivé služby, koľko záznamov bolo odoslaných alebo či sa vyskytli chyby.
+
+Z backendu je možné zariadeniu posielať aj riadiace správy. Backend môže napríklad požiadať o aktuálny stav zariadenia, health snapshot, metriky, konfiguráciu alebo spustiť OTA aktualizáciu.
+
+\section{Spätná väzba pre používateľa}
+\label{subsec:hardware-feedback}
+
+Zariadenie poskytuje používateľovi jednoduchú spätnú väzbu pomocou služby \texttt{FeedbackService}. Táto služba môže používať LED signalizáciu alebo bzučiak, podľa toho, aké prvky sú pripojené a povolené v konfigurácii.
+
+Spätná väzba je dôležitá najmä pre študenta. Po priložení karty musí vedieť, či zariadenie kartu načítalo. Úspešné načítanie môže byť signalizované krátkym bliknutím alebo pípnutím. Pri chybe môže zariadenie použiť iný signalizačný vzor.
+
+Výhodou samostatnej služby je, že ostatné časti firmvéru nemusia priamo ovládať LED alebo bzučiak. Namiesto toho iba vytvoria požiadavku na spätnú väzbu a \texttt{FeedbackService} zabezpečí konkrétnu signalizáciu.
+
+\section{Sledovanie stavu zariadenia}
+\label{subsec:hardware-health-monitoring}
+
+Pre administrátora je dôležité vidieť, v akom stave sa hardvérové zariadenie nachádza. Preto firmvér obsahuje službu \texttt{HealthService}. Tá sleduje stav zariadenia a jednotlivých služieb a tieto údaje môže odosielať cez MQTT do backendu.
+
+Sledované údaje môžu obsahovať napríklad:
+\begin{enumerate}
+    \item stav jednotlivých služieb,
+    \item dobu behu zariadenia,
+    \item voľnú heap pamäť,
+    \item fragmentáciu pamäte,
+    \item silu Wi-Fi signálu,
+    \item počet MQTT reconnectov,
+    \item počet spracovaných kariet,
+    \item počet chýb pri spracovaní.
+\end{enumerate}
+
+Tieto informácie sú užitočné pri prevádzke systému. Administrátor môže v administračnom rozhraní vidieť, či je čítačka dostupná, či má problém s Wi-Fi, alebo či niektorá služba nie je v chybovom stave.
+
+\section{OTA aktualizácia firmvéru}
+\label{subsec:hardware-ota}
+
+Firmvér podporuje OTA aktualizácie, teda aktualizáciu bez fyzického pripojenia zariadenia k počítaču. Táto funkcionalita je riešená službou \texttt{OtaService}.
+
+Backend môže cez MQTT odoslať zariadeniu príkaz na spustenie aktualizácie. Zariadenie následne skontroluje dostupnosť novej verzie firmvéru na OTA serveri. Ak je dostupná novšia verzia, zariadenie ju stiahne, nainštaluje a po dokončení sa reštartuje.
+
+Počas aktualizácie môže zariadenie odosielať informácie o priebehu, napríklad začiatok aktualizácie, percentuálny progres, úspešné dokončenie alebo chybový stav. Táto funkcionalita je dôležitá hlavne pri nasadení viacerých čítačiek v rôznych učebniach, pretože administrátor nemusí každú čítačku aktualizovať manuálne cez USB.
+ 
+\section{Riadenie spotreby}
+\label{subsec:hardware-power-management}
+
+Firmvér obsahuje aj službu \texttt{PowerService}, ktorá riadi spotrebu zariadenia. Systém rozlišuje stav samotného ESP mikrokontroléra a stav PN532 modulu. To znamená, že zariadenie môže napríklad ponechať ESP aktívne, ale NFC modul presunúť do úspornejšieho režimu.
+
+Power management je navrhnutý tak, aby zariadenie vedelo reagovať na reálnu prevádzku v učebni. Počas intenzívneho používania, keď študenti prikladajú karty jeden za druhým, má čítačka zostať pripravená. Keď je zariadenie dlhšie neaktívne, môže prejsť do úspornejšieho režimu.
+
+Táto časť je dôležitá najmä vtedy, ak by zariadenie bolo napájané z batérie alebo ak je potrebné znížiť spotrebu počas nečinnosti.
+
+\section{Zhrnutie implementácie hardvéru}
+\label{subsec:hardware-summary}
+
+Hardvérová časť systému \textit{ISIC Attendance} je implementovaná ako samostatné zariadenie založené na vývojovej doske ESP32 a NFC module PN532. Pôvodne sa počítalo s použitím mikrokontroléra ESP12-F, ale počas testovania sa ukázalo, že jeho pripojenie k sieti eduroam nie je dostatočne stabilné. Z tohto dôvodu bola ako finálna platforma zvolená doska ESP32.
+
+Implementácia je navrhnutá tak, aby zariadenie nebolo iba jednoduchou čítačkou kariet, ale plnohodnotnou súčasťou dochádzkového systému. Obsahuje konfiguráciu cez webové rozhranie, offline buffer, health monitoring, metriky, OTA aktualizácie a riadenie spotreby. Tieto vlastnosti zvyšujú spoľahlivosť systému a umožňujú administrátorovi jednoduchšie sledovať a spravovať hardvérové zariadenia.

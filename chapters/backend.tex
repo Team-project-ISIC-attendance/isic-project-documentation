@@ -1,0 +1,155 @@
+\chapter{Implementácia backendovej časti}
+\label{chap:backend-implementation}
+
+Táto kapitola opisuje implementáciu backendovej časti systému \textit{ISIC Attendance}. Backend predstavuje centrálnu časť systému, ktorá prepája hardvérové čítačky, databázu a používateľské rozhranie. Jeho úlohou je prijímať údaje z NFC čítačiek, spracovať ich, rozhodnúť o započítaní účasti a poskytovať API pre frontend aplikáciu.
+
+Backend je implementovaný v jazyku Python pomocou frameworku \texttt{FastAPI}. Na prácu s databázou sa používa \texttt{SQLAlchemy} v asynchrónnom režime a databázové migrácie sú riešené pomocou nástroja \texttt{Alembic}. Komunikácia s hardvérom prebieha cez protokol MQTT.
+
+\section{Použité technológie}
+\label{sec:backend-technologies}
+
+Backendová časť využíva viacero technológií, ktoré zabezpečujú webové API, komunikáciu s hardvérom, autentifikáciu a ukladanie dát.
+
+Medzi hlavné použité technológie patria:
+\begin{enumerate}
+    \item \textbf{FastAPI} -- framework na vytvorenie REST API,
+    \item \textbf{Uvicorn} -- ASGI server na spustenie aplikácie,
+    \item \textbf{SQLAlchemy} -- ORM nástroj na prácu s databázou,
+    \item \textbf{SQLite} -- databáza použitá pri vývoji a testovaní,
+    \item \textbf{Alembic} -- nástroj na správu databázových migrácií,
+    \item \textbf{aiomqtt} -- knižnica na komunikáciu cez MQTT,
+    \item \textbf{Pydantic} -- validácia dát a definícia API schém,
+    \item \textbf{JWT} -- prihlasovanie a autorizácia používateľov,
+    \item \textbf{openpyxl} -- generovanie exportov vo formáte XLSX.
+\end{enumerate}
+
+Použitie asynchrónneho backendu je vhodné najmä preto, že systém pracuje s viacerými typmi vstupov. Backend musí obsluhovať HTTP požiadavky z frontendu a zároveň spracúvať MQTT správy z hardvérových zariadení.
+
+\section{Architektúra backendu}
+\label{sec:backend-architecture}
+
+Backend je rozdelený na viacero vrstiev. Takéto rozdelenie zlepšuje prehľadnosť kódu a umožňuje jednoduchšiu údržbu systému. Základné časti backendu sú API vrstva, servisná vrstva, databázové modely a MQTT časť.
+
+API vrstva obsahuje jednotlivé endpointy, ktoré používa frontend. Tieto endpointy sú rozdelené podľa oblasti, napríklad autentifikácia, predmety, študenti, rozvrh, hodiny, dochádzka a export.
+
+Servisná vrstva obsahuje hlavnú aplikačnú logiku. V nej sa rieši napríklad vytváranie rozvrhu, zapisovanie študentov do predmetov, generovanie hodín, spracovanie dochádzky alebo export údajov. Vďaka tomu endpointy neobsahujú príliš veľa logiky a slúžia hlavne ako rozhranie medzi klientom a backendom.
+
+Databázová vrstva obsahuje modely, ktoré reprezentujú údaje uložené v databáze. MQTT časť zabezpečuje príjem správ z hardvérových zariadení a ich spracovanie.
+
+\section{Databázový model}
+\label{sec:backend-database-model}
+
+Databáza uchováva údaje o používateľoch, predmetoch, študentoch, rozvrhu, hodinách, skenoch kariet a dochádzke. Hlavné databázové entity sú:
+\begin{enumerate}
+    \item \textbf{User} -- používateľ systému, napríklad administrátor alebo vyučujúci,
+    \item \textbf{Subject} -- predmet vytvorený vyučujúcim,
+    \item \textbf{Semester} -- semester s dátumom začiatku, konca a počtom týždňov,
+    \item \textbf{ScheduleEntry} -- položka rozvrhu, napríklad cvičenie alebo prednáška,
+    \item \textbf{Lesson} -- konkrétna hodina v konkrétnom týždni,
+    \item \textbf{ISIC} -- karta študenta identifikovaná pomocou UID,
+    \item \textbf{Enrollment} -- priradenie študenta k predmetu,
+    \item \textbf{ISICScan} -- záznam o načítaní karty,
+    \item \textbf{AttendanceRecord} -- záznam dochádzky pre študenta a hodinu,
+    \item \textbf{WeekNote} -- poznámka k týždňu semestra.
+\end{enumerate}
+
+Dôležitou súčasťou databázového návrhu sú unikátne obmedzenia. Napríklad jeden študent môže byť v jednom predmete zapísaný iba raz. Rovnako pre jednu hodinu a jedného študenta môže existovať iba jeden dochádzkový záznam. Tým sa predchádza duplicitám a zvyšuje sa konzistentnosť údajov.
+
+Dochádzkový záznam obsahuje aj stav účasti. Použité stavy sú \texttt{pritomny}, \texttt{nepritomny}, \texttt{nahrada} a \texttt{ospravedlneny}. Okrem toho sa ukladá, či bol záznam vytvorený automaticky skenom karty alebo manuálne vyučujúcim.
+
+\section{Autentifikácia a roly používateľov}
+\label{sec:backend-authentication}
+
+Backend používa prihlasovanie pomocou e-mailu a hesla. Heslá sa neukladajú v otvorenej forme, ale ako hash. Po úspešnom prihlásení backend vytvorí JWT token, ktorý frontend používa pri ďalších požiadavkách.
+
+V systéme sú implementované dve hlavné roly:
+\begin{enumerate}
+    \item \textbf{admin} -- administrátor systému,
+    \item \textbf{teacher} -- vyučujúci.
+\end{enumerate}
+
+Administrátor môže vytvárať nových používateľov, napríklad nových vyučujúcich. Pri štarte aplikácie sa zároveň kontroluje, či v databáze existuje aspoň jeden používateľ. Ak databáza ešte používateľa neobsahuje, backend vytvorí základný administrátorský účet podľa konfiguračných hodnôt.
+
+Vyučujúci pracuje hlavne so svojimi predmetmi, študentmi, rozvrhom a dochádzkou. Pri niektorých endpointoch backend kontroluje, či daný predmet patrí aktuálne prihlásenému vyučujúcemu. Administrátor má širšie oprávnenia a môže pristupovať aj k administrátorským častiam systému.
+
+\section{Správa predmetov, študentov a rozvrhu}
+\label{sec:backend-subjects-schedule}
+
+Backend poskytuje API na vytváranie a správu predmetov. Predmet obsahuje názov, kód, farbu a informáciu o vyučujúcom. Farba predmetu sa používa hlavne vo frontende pri zobrazení rozvrhu alebo kalendára.
+
+Študenti sa do predmetu pridávajú pomocou entity \texttt{Enrollment}. Pri pridaní študenta sa podľa ISIC identifikátora vyhľadá alebo vytvorí záznam karty. Následne sa vytvorí priradenie študenta k predmetu. Ak už pre predmet existujú vytvorené hodiny, backend pre nového študenta automaticky vytvorí dochádzkové záznamy so stavom \texttt{nepritomny}. Vďaka tomu má vyučujúci v prehľade dochádzky kompletný zoznam študentov.
+
+Rozvrh je reprezentovaný pomocou entity \texttt{ScheduleEntry}. Tá obsahuje deň v týždni, začiatok, koniec, miestnosť, typ hodiny a informáciu o opakovaní. Na základe rozvrhovej položky backend vytvára konkrétne hodiny typu \texttt{Lesson} pre jednotlivé týždne semestra. Podporované sú pravidelné hodiny aj jednorazové udalosti.
+
+\section{Príjem údajov z hardvéru cez MQTT}
+\label{sec:backend-mqtt}
+
+Komunikácia medzi hardvérovou čítačkou a backendom je riešená pomocou protokolu MQTT. Tento protokol je vhodný pre zariadenia typu ESP, pretože umožňuje jednoduché odosielanie správ zo zariadenia na server bez potreby priameho HTTP volania pri každom načítaní karty.
+
+Backend pri štarte vytvorí MQTT klienta, ktorý sa pripojí k MQTT brokeru a prihlási sa na odber nastavenej témy. Klient beží ako samostatná asynchrónna úloha popri FastAPI aplikácii. Vďaka tomu backend dokáže súčasne obsluhovať požiadavky z frontendu aj prijímať správy z hardvérových zariadení.
+
+Každá prijatá správa obsahuje názov témy a samotné dáta. Téma sa používa na rozlíšenie zariadenia a typu správy. Backend z témy získa identifikátor zariadenia a príponu správy. Podľa tejto prípony následne rozhodne, ako má správu spracovať. Najdôležitejšie typy správ sú:
+\begin{enumerate}
+    \item \texttt{attendance} -- záznamy o načítaných ISIC kartách,
+    \item \texttt{status} -- automaticky odosielané stavové správy zariadenia,
+    \item \texttt{health} -- podrobnejšie informácie o stave zariadenia.
+\end{enumerate}
+
+Najdôležitejšie sú správy typu \texttt{attendance}, pretože z nich vznikajú záznamy o skenovaní kariet. Backend podporuje prijatie jedného záznamu aj dávky viacerých záznamov. To znamená, že hardvér môže odoslať buď jeden JSON objekt, alebo zoznam objektov. Tento prístup je dôležitý hlavne pri offline režime, keď čítačka po obnovení spojenia odošle viacero uložených záznamov naraz.
+
+Jeden dochádzkový záznam obsahuje najmä:
+\begin{enumerate}
+    \item \texttt{uid} -- identifikátor načítanej ISIC karty,
+    \item \texttt{ts} -- čas načítania karty,
+    \item \texttt{seq} -- poradové číslo záznamu zo zariadenia.
+\end{enumerate}
+
+Po úspešnom načítaní údajov backend vytvorí záznam \texttt{ISICScan}. Tento záznam predstavuje samotný fakt, že konkrétna karta bola priložená k čítačke. Ak karta ešte nie je v databáze evidovaná, systém ju vie vytvoriť ako nový ISIC identifikátor. Tým sa zabezpečí, že sa nestratí ani sken karty, ktorá ešte nemá doplnené údaje študenta.
+
+Po vytvorení skenu backend spustí logiku automatického započítania účasti. Táto logika sa pokúsi nájsť vhodnú aktívnu hodinu podľa času skenu a predmetov, v ktorých je študent zapísaný. Ak sa nájde zodpovedajúca hodina, systém aktualizuje dochádzkový záznam študenta.
+
+Správy typu \texttt{status} sa odosielajú automaticky a slúžia na základné sledovanie dostupnosti a stavu hardvérového zariadenia. Backend ich môže používať na zistenie, či je čítačka online a či pravidelne komunikuje so systémom. Správy typu \texttt{health} obsahujú podrobnejšie diagnostické údaje, napríklad stav služieb, počet chýb alebo informácie o pripojení. Tieto správy sa spracúvajú oddelene od dochádzky, pretože priamo nevytvárajú záznam o účasti.
+
+V budúcnosti môžu byť tieto údaje použité v administračnom rozhraní, aby administrátor videl stav jednotlivých čítačiek. Administrátor tak môže jednoduchšie zistiť, či je zariadenie dostupné, či pravidelne odosiela stavové správy alebo či sa vyskytol technický problém.
+\section{Automatické započítanie účasti}
+\label{sec:backend-auto-attendance}
+
+Najdôležitejšou časťou backendu je logika automatického započítania účasti. Po prijatí skenu karty backend najskôr vytvorí záznam o skene. Následne sa pokúsi nájsť hodinu, na ktorú sa sken vzťahuje.
+
+Backend najprv zistí, v ktorých predmetoch je daný študent zapísaný. Potom vyhľadá všetky nezrušené hodiny v daný dátum, ktoré patria týmto predmetom. Pre každú nájdenú hodinu overí, či čas skenu spadá do povoleného registračného okna. Toto okno je nastavené tak, že registrácia môže začať určitý počet minút pred začiatkom hodiny a končí určitý počet minút po jej skončení.
+
+Ak sken patrí do aktívneho okna, backend vyhľadá dochádzkový záznam pre danú hodinu a študenta. Ak záznam existuje a ešte nebol zapísaný skenom, nastaví jeho stav na \texttt{pritomny}. Zároveň nastaví, že záznam bol vytvorený pomocou skenu, a priradí k nemu príslušný \texttt{ISICScan}.
+
+Táto logika pomáha zabezpečiť správne započítanie účasti. Systém nezapočíta účasť študentovi, ktorý nie je zapísaný v danom predmete, ani vtedy, keď v čase skenu neprebieha žiadna vhodná hodina. Zároveň je spracovanie idempotentné: ak už bol záznam zapísaný skenom, opakovaný sken nevytvorí ďalšiu duplicitnú účasť.
+
+Dôležité je aj zachovanie manuálnych úprav vyučujúceho. Ak vyučujúci už manuálne nastavil iný stav ako \texttt{nepritomny}, automatický sken tento stav neprepíše. Tým sa predchádza situácii, keď by systém zmenil rozhodnutie vyučujúceho.
+
+\section{Manuálna práca s dochádzkou}
+\label{sec:backend-manual-attendance}
+
+Okrem automatického zápisu pomocou ISIC karty backend umožňuje aj manuálnu prácu s dochádzkou. Vyučujúci môže zobraziť dochádzku konkrétnej hodiny, vidieť zoznam študentov a základný súhrn podľa stavov.
+
+Dochádzkový záznam je možné manuálne upraviť. Vyučujúci tak môže študentovi nastaviť stav \texttt{pritomny}, \texttt{nepritomny}, \texttt{nahrada} alebo \texttt{ospravedlneny}. Táto možnosť je dôležitá, pretože v praxi môžu nastať situácie, keď študent kartu zabudne, karta sa nepodarí načítať alebo je potrebné dochádzku opraviť dodatočne.
+
+Backend podporuje aj presun dochádzky na inú hodinu. Táto funkcionalita je užitočná napríklad pri náhradnej účasti, keď študent absolvuje hodinu v inom termíne. Pri presune backend kontroluje, či cieľová hodina patrí k rovnakému predmetu alebo zodpovedajúcej udalosti, aby nedošlo k nesprávnemu priradeniu účasti.
+
+\section{Export údajov}
+\label{sec:backend-export}
+
+Systém umožňuje exportovať údaje na ďalšie spracovanie. Backend podporuje export zoznamu študentov aj export dochádzky. Export môže byť vytvorený vo formáte CSV alebo XLSX.
+
+Pri exporte dochádzky backend vytvorí tabuľku, kde riadky predstavujú študentov a stĺpce jednotlivé hodiny. V bunkách sa nachádza stav dochádzky pre daného študenta a hodinu. Takýto formát je praktický pre vyučujúceho, pretože ho môže ďalej otvoriť napríklad v tabuľkovom editore.
+
+\section{Testovanie backendu}
+\label{sec:backend-testing}
+
+Backend obsahuje testy pre viaceré dôležité časti systému. Testuje sa napríklad autentifikácia, práca s predmetmi a študentmi, generovanie rozvrhu, evidencia dochádzky, export údajov a spracovanie MQTT správ.
+
+Testy sú dôležité hlavne pri dochádzkovom systéme, pretože chyba v logike môže spôsobiť nesprávne započítanie účasti. Automatické testy pomáhajú overiť, že po úpravách kódu zostane správanie systému správne.
+
+\section{Zhrnutie implementácie backendu}
+\label{sec:backend-summary}
+
+Backendová časť systému \textit{ISIC Attendance} zabezpečuje spracovanie údajov medzi hardvérovou čítačkou, databázou a používateľským rozhraním. Prijíma skeny ISIC kariet cez MQTT, vytvára záznamy o skenoch a automaticky sa pokúša započítať účasť na správnej hodine.
+
+Okrem automatického spracovania poskytuje backend aj REST API pre správu používateľov, predmetov, študentov, semestrov, rozvrhu a dochádzky. Dôležitou súčasťou je autentifikácia pomocou JWT, kontrola rolí, export údajov a databázová konzistencia. Celé riešenie je navrhnuté tak, aby podporovalo stabilnú evidenciu dochádzky a znižovalo riziko nesprávneho alebo duplicitného zápisu.
