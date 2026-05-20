@@ -1,0 +1,18 @@
+\chapter{Záver}
+\label{chap:conclusion}
+
+Cieľom tímového projektu bolo navrhnúť a implementovať prototyp systému na evidenciu účasti študentov na vyučovaní pomocou ISIC kariet. Výsledkom práce je systém \textit{ISIC Attendance}, ktorý spája hardvérovú čítačku, backendovú časť, databázu a webové používateľské rozhranie.
+
+V rámci projektu bola implementovaná hardvérová časť založená na vývojovej doske ESP32 a NFC module PN532. Zariadenie dokáže načítať UID z ISIC karty, spracovať udalosť vo firmvéri a odoslať ju do backendu pomocou protokolu MQTT. Pri návrhu hardvéru bol kladený dôraz najmä na stabilitu komunikácie, jednoduchú konfiguráciu, spätnú väzbu pre používateľa a možnosť vzdialenej aktualizácie firmvéru.
+
+Backendová časť systému zabezpečuje spracovanie údajov prijatých z hardvéru, ukladanie dát do databázy a poskytovanie REST API pre frontend. Dôležitou časťou backendu je logika automatického započítania účasti, ktorá overuje, či načítaná karta patrí študentovi zapísanému v danom predmete a či sken prebehol počas aktívnej hodiny.
+
+Frontendová časť poskytuje používateľské rozhranie pre administrátora a vyučujúceho. Administrátor môže spravovať vyučujúcich, sledovať stav hardvérových zariadení a spúšťať vzdialenú aktualizáciu firmvéru. Vyučujúci môže vytvárať semestre, spravovať rozvrh, pridávať študentov do predmetov a kontrolovať ich dochádzku v prehľadnom kalendárovom rozhraní. Súčasťou systému je aj export údajov, ktorý umožňuje ďalšie spracovanie dochádzky mimo aplikácie.
+
+Počas riešenia projektu sa ukázalo, že jednou z najdôležitejších vlastností systému je spoľahlivosť. Systém musí správne reagovať na situácie, keď sa karta načíta opakovane, keď zariadenie stratí pripojenie alebo keď sa študent pokúsi registrovať mimo aktívnej hodiny. Preto boli do riešenia zahrnuté mechanizmy ako debounce pri čítaní kariet, offline buffer vo firmvéri, kontrola duplicít na backende a sledovanie stavu hardvérových zariadení.
+
+Projekt splnil hlavný cieľ, ktorým bolo vytvorenie funkčného prototypu systému na automatizovanú evidenciu účasti študentov. Implementované riešenie ukazuje, že využitie ISIC kariet a NFC technológie môže zjednodušiť prácu vyučujúcich, zrýchliť zaznamenávanie dochádzky a znížiť množstvo manuálnej administratívy.
+
+Systém má zároveň priestor na ďalšie rozširovanie. V budúcnosti by bolo možné doplniť hlbšiu integráciu s akademickým informačným systémom, pokročilejšie štatistiky dochádzky, lepšiu správu viacerých zariadení a detailnejšie notifikácie pri chybových stavoch hardvéru. Ďalším krokom by mohlo byť aj dlhodobejšie testovanie v reálnych podmienkach výučby, ktoré by ukázalo praktickú spoľahlivosť systému pri väčšom počte študentov a čítačiek.
+
+Celkovo možno projekt hodnotiť ako úspešný prototyp riešenia, ktorý prepája hardvérové a softvérové komponenty do jedného funkčného celku. Systém \textit{ISIC Attendance} slúži ako východisko pre reálne nasadenie automatizovanej evidencie dochádzky v univerzitnom prostredí.
