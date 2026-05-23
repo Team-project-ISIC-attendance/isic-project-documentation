@@ -421,32 +421,43 @@ Hardvérové zariadenie nevykonáva komplexnú aplikačnú logiku (napr.\ mapova
 
 \section{Ako prebieha zaznamenanie prítomnosti}
 
-Na obrázku~\ref{fig:attendance-sequence} je znázornený základný tok údajov
-pri zaznamenaní prítomnosti od priloženia ISIC karty až po zobrazenie výsledkov
-vo webovej aplikácii.
+Proces zaznamenania prítomnosti začína v momente, keď študent priloží svoju ISIC kartu k NFC čítačke umiestnenej v učebni. Úlohou hardvérového zariadenia je kartu načítať, vykonať základné lokálne kontroly a v prípade platného skenu odoslať udalosť na backend cez MQTT.
 
 \begin{figure}[h!]
   \centering
   \includegraphics[width=\textwidth]{figures/attendance_sequence.png}
-  \caption{Sekvenčný diagram procesu zaznamenania prítomnosti}
-  \label{fig:attendance-sequence}
+  \caption{Sekvenčný diagram procesu skenovania ISIC karty}
+  \label{fig:attendance-scan-sequence}
 \end{figure}
 
-\subsection{Krok 1: Skenovanie ISIC karty}
-Študent príde na vyučovanie a priloží ISIC kartu k NFC čítačke v učebni. Zariadenie načíta identifikátor karty a vytvorí udalosť dochádzky obsahujúcu UID karty a časovú pečiatku v UTC+0 (podrobnosti o formáte časovej pečiatky sú uvedené pri popise dátového modelu, entita Attendance).
+\subsection{Krok 1: Priloženie a načítanie ISIC karty}
 
-\subsection{Krok 2: Odoslanie udalosti na server}
-Po načítaní karty zariadenie cez Wi-Fi odošle vytvorenú udalosť na server pomocou \textit{MQTT}. Tento prístup je vhodný aj pri väčšom počte učební a zariadení, pretože výmena správ je rýchla a rozšírenie o ďalšie zariadenia si nevyžaduje zásadné zmeny architektúry.
+Študent priloží ISIC kartu k NFC čítačke. Zariadenie načíta UID alebo číslo karty a vytvorí lokálnu udalosť skenu. Súčasťou udalosti je aj časová pečiatka, ktorá určuje, kedy bol sken vykonaný. Tento čas je dôležitý pri neskoršom priraďovaní skenu ku konkrétnej vyučovacej hodine.
 
-\subsection{Krok 3: Spracovanie na backende}
-Backend prijme udalosť a vykoná základnú aplikačnú logiku:
-\begin{itemize}
-  \item overí, či je karta systému známa (t.\ j.\ či je priradená konkrétnemu študentovi),
-  \item určí, ku ktorej hodine sa udalosť vzťahuje (napr.\ aktívna hodina pre danú učebňu alebo časové okno vyučovania),
-  \item vytvorí alebo aktualizuje záznam v tabuľke dochádzky.
-\end{itemize}
+Hardvérové zariadenie zároveň vykonáva jednoduchú ochranu proti duplicitnému čítaniu. Ak študent priloží tú istú kartu viackrát v krátkom čase, napríklad v intervale dvoch sekúnd, druhé načítanie sa ignoruje. Tým sa zabráni tomu, aby jeden fyzický príchod študenta vytvoril viacero rovnakých udalostí.
 
-Následne sa udalosť stáva súčasťou štruktúrovaných údajov v databáze, s ktorými dokáže pracovať webové rozhranie.
+\subsection{Krok 2: Lokálna kontrola formátu}
 
-\subsection{Krok 4: Zobrazenie a výstupy vo webovej aplikácii}
-Vyučujúci alebo administrátor použije webovú aplikáciu na zobrazenie výsledkov: vyberie kurz a konkrétnu hodinu a zobrazí sa zoznam študentov s príslušnými záznamami prítomnosti. V prípade potreby je možné údaje exportovať (alebo importovať) v štandardných formátoch (CSV/Excel/XML).
+Po načítaní karty zariadenie overí, či načítaná hodnota zodpovedá očakávanému formátu ISIC čísla. Ide o základnú kontrolu, ktorá sa vykonáva ešte priamo na hardvéri.
+
+Ak načítaná hodnota nezodpovedá formátu ISIC čísla, zariadenie udalosť neposiela na backend. Takýto sken sa teda zastaví už na úrovni hardvéru, pretože backend by ho aj tak nevedel priradiť ku študentovi. Tento prístup znižuje počet zbytočných požiadaviek na server a odfiltruje neplatné alebo chybné načítania.
+
+\subsection{Krok 3: Odoslanie udalosti cez MQTT}
+
+Ak karta prejde lokálnymi kontrolami, zariadenie publikuje udalosť do MQTT brokeru. Udalosť obsahuje identifikátor karty, čas skenu a prípadne identifikátor zariadenia alebo učebne. MQTT broker následne doručí túto správu backendu, ktorý je prihlásený na odber príslušnej témy.
+
+Ak backend v danom momente nepracuje alebo nie je dostupný, sken sa nespracuje serverovou logikou. V takom prípade frontend nedostane nový záznam o skene a učiteľ ho neuvidí vo webovom rozhraní.
+
+\subsection{Krok 4: Spracovanie skenu na backende}
+
+Backend po prijatí udalosti vykoná aplikačné overenie. Najprv overí, či karta patrí známemu študentovi. Následne podľa času skenu a zariadenia alebo miestnosti zisťuje, či sa v danej učebni v tomto čase nachádza predmet v rozvrhu.
+
+Ak sa v aktuálnej hodine nenachádza žiadny predmet v rozvrhu, systém nevytvorí záznam dochádzky. Sken sa uloží iba do logu študenta alebo logu skenov. Takýto záznam môže byť neskôr použitý na kontrolu, audit alebo diagnostiku, ale neznamená automatickú prítomnosť na hodine.
+
+Ak predmet v rozvrhu existuje, backend vytvorí alebo aktualizuje záznam dochádzky. Záznam sa uloží do databázy a obsahuje väzbu na študenta, konkrétnu vyučovaciu hodinu, čas skenu a výsledný stav dochádzky, napríklad prítomný.
+
+\subsection{Krok 5: Uloženie výsledku}
+
+Po úspešnom spracovaní sa výsledok uloží do databázy. Databáza tak obsahuje jednak samotné záznamy dochádzky, jednak pomocné logy skenov, ktoré umožňujú spätne analyzovať aj situácie, keď sken neviedol k vytvoreniu dochádzky.
+
+Takto je oddelená jednoduchá úloha hardvéru, ktorou je spoľahlivé načítanie a odoslanie skenu, od rozhodovacej logiky backendu, ktorá určuje, či má byť zo skenu vytvorený dochádzkový záznam.

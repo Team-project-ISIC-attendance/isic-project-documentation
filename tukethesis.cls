@@ -647,7 +647,6 @@
     \noindent
     \begin{tabular}{@{}p{.18\textwidth}p{.7\textwidth}}
         \teammembername:& Andrian-Maksym Balaichuk \\
-        \teammembername:& Danylo Zahorulko \\
         \teammembername:& Vladyslav Panik \\
         \teammembername:& Vitalii Romaniuk \\
         \teammembername:& Yurii Soma \\
