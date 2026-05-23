@@ -7,14 +7,14 @@ Táto kapitola popisuje architektúru a tok údajov v prototypovom systéme ISIC
 Riešenie je navrhnuté modulárne a pozostáva z hardvérového zariadenia v učebni, serverovej časti, webového rozhrania a databázy. Komponenty sú prepojené tak, aby bol zber udalostí spoľahlivý, prenos efektívny a ukladanie údajov konzistentné.
 
 \subsection{Hardware: zariadenie v učebni}
-V každej učebni je umiestnené kompaktné zariadenie s RFID/NFC čítačkou určené na evidenciu prítomnosti. Prototyp je postavený na mikrokontroléri \textit{ESP8266 / ESP-12F} a NFC module \textit{PN532}. Zariadenie sa pripája do lokálnej Wi-Fi siete a odosiela udalosti na server prostredníctvom protokolu \textit{MQTT}, ktorý je vhodný pre scenáre s väčším počtom zariadení a častými udalosťami.
+V každej učebni je umiestnené kompaktné zariadenie s RFID/NFC čítačkou určené na evidenciu prítomnosti. Prototyp je postavený na mikrokontroléri \textit{ESP8266 / ESP-12F} a NFC module \textit{PN532}. Zariadenie sa pripája do lokálnej Wi-Fi siete a odosiela udalosti na server prostredníctvom protokolu \textit{MQTT}~\cite{oasis:mqtt}, ktorý je vhodný pre scenáre s väčším počtom zariadení a častými udalosťami.
 
 \subsubsection{Zoznam súčiastok a napájanie}
 Zariadenie je navrhnuté ako jednoduchý IoT uzol s NFC čítačkou a bezdrôtovou komunikáciou. Z pohľadu hardvéru prototyp obsahuje najmä:
 \begin{itemize}
   \item modul \textit{ESP-12F (ESP8266)} ako hlavná riadiaca jednotka,
   \item modul \textit{PN532} na čítanie NFC/RFID kariet (ISIC),
-  \item napájanie \textbf{3,3~V} (v prototypovej verzii uvažované ako batériový zdroj 3,3~V),
+  \item napájanie \textbf{3,3~V} (v prototypovej verzii realizované priamym zdrojom 3,3~V; v produkčnej verzii bude napájanie zabezpečovať Li-Ion batéria s napätím 4,2~V, znižovaným na 3,3~V pomocou napäťového regulátora),
   \item indikačné prvky (LED + bzučiak/piezo) pre spätnú väzbu používateľovi,
   \item mechanické časti (kryt, konektory, prepojovacie vodiče).
 \end{itemize}
@@ -46,6 +46,31 @@ Komunikácia medzi \textit{ESP-12F} a čítačkou \textit{PN532} je v prototypov
 
 V prototypovej fáze je pre funkčnosť čítania potrebné prepojenie napájania, zeme a SPI signálov (SCK/MOSI/MISO/CS). Pin \textit{IRQ} je v aktuálnej implementácii použitý pre signalizáciu udalosti z čítačky (predvolene GPIO4) a \textit{RSTO} je voliteľný (najmä pre hardvérový reset alebo pri pokročilejších režimoch šetrenia energie).
 
+\subsubsection{Vývojová varianta s ESP32}
+Pre účely vývoja a ladenia firmvéru bola okrem cieľového modulu \textit{ESP-12F} použitá aj vývojová doska \textit{ESP32} (DevKit). Keďže ide o vývojovú dosku s integrovaným USB-UART prevodníkom, programovanie a sériový monitoring sú výrazne pohodlnejšie ako pri holom module ESP-12F. Firmvér je navrhnutý tak, aby bol kompatibilný s oboma platformami; rozdielne sú iba priraďovania pinov.
+
+\begin{table}[h!]
+  \centering
+  \caption{Prepojenie PN532 s ESP32 DevKit (SPI) -- vývojová varianta}
+  \label{tab:pn532-esp32-wiring}
+  \begin{tabular}{ll}
+    \toprule
+    PN532 & ESP32 DevKit \\
+    \midrule
+    VCC (3,3~V) & 3,3~V \\
+    GND & GND \\
+    SCK & GPIO18 \\
+    MISO & GPIO19 \\
+    MOSI & GPIO23 \\
+    SS/CS & GPIO5 \\
+    IRQ & GPIO4 \\
+    RSTO (voliteľné) & voľný GPIO \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+ESP32 DevKit bol využívaný výhradne ako vývojová a ladiaca platforma. Produkčný hardvér zostáva navrhnutý pre modul \textit{ESP-12F (ESP8266)}.
+
 \subsubsection{Prepojenie LED a bzučiaka}
 Spätná väzba pre používateľa je realizovaná cez \texttt{FeedbackService}, pričom konkrétne piny sú konfigurovateľné (\texttt{FeedbackConfig}). V prototypovej verzii bez kolízie so SPI je použité nasledujúce zapojenie:
 \begin{itemize}
@@ -68,12 +93,12 @@ Spätná väzba pre používateľa je realizovaná cez \texttt{FeedbackService},
 \end{table}
 
 \subsubsection{Schéma zapojenia a fotodokumentácia}
-Na obrázku~\ref{fig:hw-prototype} je vyhradené miesto pre schému zapojenia alebo fotodokumentáciu prototypu. Obrázok bude doplnený podľa finálneho fyzického zapojenia.
+Na obrázku~\ref{fig:hw-prototype} je zobrazené hardvérové zapojenie prototypu.
 
 \begin{figure}[h!]
   \centering
   \includegraphics[width=0.9\textwidth]{figures/circuit_image.png}
-  \caption{Hardvérové zapojenie prototypu (doplní sa)}
+  \caption{Hardvérové zapojenie prototypu}
   \label{fig:hw-prototype}
 \end{figure}
 
@@ -158,20 +183,70 @@ Prehľad firmvéru je rozdelený do vrstiev podobne ako v podnikových systémoc
 \end{figure}
 
 \subsubsection{Tok udalostí v rámci firmvéru}
-Vstupná udalosť (sken karty) sa publikuje cez \textbf{EventBus} do \texttt{AttendanceService}, kde sa uplatní debounce a prípadné dávkovanie. Následne ju \texttt{MqttService} publikuje do brokeru. Konfigurácia sa spracúva cez \texttt{ConfigService} a stav zariadenia je pravidelne reportovaný službou \texttt{HealthService}. Táto architektúra umožňuje pridávať nové služby (napr.\ lokálne logovanie alebo ďalšie integračné výstupy) bez zásahu do existujúceho kódu.
+Vstupná udalosť (sken karty) sa publikuje cez \textbf{EventBus} do \texttt{AttendanceService}, kde sa uplatní debounce a prípadné dávkovanie. Následne ju \texttt{MqttService} publikuje do brokeru. Konfigurácia sa spracúva cez \texttt{ConfigService} a stav zariadenia je pravidelne reportovaný službou \texttt{HealthService}. Táto architektúra minimalizuje zásahy do existujúcej funkcionality pri pridávaní novej služby -- nová služba sa zaregistruje v \texttt{App} a prihlási sa na odber relevantných udalostí cez \texttt{EventBus}, pričom ostatné služby zostávajú nezmenené.
+
 
 \subsection{Backend: server a databáza}
 Serverová časť je realizovaná ako serverová služba s \textit{REST API} a podporou prijímania udalostí z hardvérových zariadení cez \textit{MQTT}. V projekte sa používajú open-source technológie, najmä \textit{Python}, a taktiež kontajnerizácia pomocou \textit{Docker}, ktorá zjednodušuje nasadenie systému a zaručuje reprodukovateľnosť prostredia.
 
 Backend zabezpečuje kľúčové funkcie:
 \begin{itemize}
-  \item prijímanie a spracovanie udalostí zo zariadení,
+  \item obojsmerná komunikácia so zariadeniami cez MQTT (prijímanie udalostí, odosielanie konfigurácie a príkazov),
   \item prácu s databázou, v ktorej sú uložené údaje o študentoch, kurzoch, hodinách a záznamoch dochádzky,
   \item poskytovanie API pre frontend, teda pre webové rozhranie vyučujúceho/administrátora,
   \item tvorbu výstupov a podporu exportu/importu v formátoch CSV/Excel/XML pre ďalšie použitie alebo integráciu s inými systémami.
 \end{itemize}
 
 Serverová časť teda predstavuje centrálny prvok, ktorý spája čítacie zariadenia a používateľské webové rozhranie a zabezpečuje konzistentné ukladanie a sprístupnenie údajov.
+
+\subsubsection{MQTT kontrakt medzi backendom a zariadením}
+Každá MQTT téma je scopovaná na konkrétne zariadenie pomocou dvojice konfigurovateľných hodnôt: názvu témy a identifikátora zariadenia.
+
+Tabuľka~\ref{tab:mqtt-sw-hw} sumarizuje správy, ktoré backend posiela zariadeniu (SW\,→\,HW):
+
+\begin{table}[h!]
+  \centering
+  \caption{MQTT správy backend → zariadenie (SW\,→\,HW)}
+  \label{tab:mqtt-sw-hw}
+  \begin{tabular}{lp{9cm}}
+    \toprule
+    Téma (suffix) & Účel \\
+    \midrule
+    \texttt{config/set} & Nastavenie celej konfigurácie zariadenia \\
+    \texttt{config/set/<sekcia>} & Nastavenie jednej sekcie konfigurácie \\
+    \texttt{config/get} & Vyžiadanie celej konfigurácie \\
+    \texttt{config/get/<sekcia>} & Vyžiadanie jednej sekcie konfigurácie \\
+    \texttt{status/request} & Vyžiadanie okamžitého statusu \\
+    \texttt{health/request} & Vyžiadanie okamžitého health reportu \\
+    \texttt{metrics/request} & Vyžiadanie okamžitého výpisu metrík \\
+    \texttt{ota/start} & Spustenie OTA aktualizácie firmvéru \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Tabuľka~\ref{tab:mqtt-hw-sw} sumarizuje správy, ktoré zariadenie posiela backendu (HW\,→\,SW):
+
+\begin{table}[h!]
+  \centering
+  \caption{MQTT správy zariadenie → backend (HW\,→\,SW)}
+  \label{tab:mqtt-hw-sw}
+  \begin{tabular}{lp{9cm}}
+    \toprule
+    Téma (suffix) & Obsah / účel \\
+    \midrule
+    \texttt{attendance} & Dávka dochádzkových záznamov (JSON pole) \\
+    \texttt{status} & Lightweight heartbeat (verzia firmvéru) \\
+    \texttt{health} & Zdravotný report zariadenia (heap, Wi-Fi RSSI, uptime\ldots) \\
+    \texttt{metrics} & Metriky jednotlivých služieb \\
+    \texttt{config} & Odpoveď na \texttt{config/get} (celá konfigurácia) \\
+    \texttt{config/<sekcia>} & Odpoveď na \texttt{config/get/<sekcia>} \\
+    \texttt{ota/update\_available} & Dostupná nová verzia firmvéru \\
+    \texttt{ota/progress} & Priebeh sťahovania OTA (percentá) \\
+    \texttt{ota/completed} & OTA úspešne dokončená \\
+    \texttt{ota/error} & Chyba počas OTA \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
 \subsection{Frontend: webové rozhranie}
 Používatelia pracujú so systémom prostredníctvom webového rozhrania. V projekte je navrhnutá webová aplikácia s moderným UI, implementovaná pomocou \textit{React}. Webová časť poskytuje prístup k údajom o dochádzke a nástroje na správu výučbových objektov.
@@ -269,7 +344,7 @@ Entita Attendance reprezentuje záznam o účasti študenta na vyučovaní:
     \item \texttt{created\_at} -- časová značka vytvorenia záznamu v databáze
 \end{itemize}
 
-Rozlíšenie medzi atribútmi \texttt{scan\_timestamp} a \texttt{created\_at} umožňuje korektné spracovanie situácií, kedy je záznam vytvorený s oneskorením (napríklad pri offline režime zariadenia).
+Rozlíšenie medzi atribútmi \texttt{scan\_timestamp} a \texttt{created\_at} umožňuje korektné spracovanie situácií, kedy je záznam vytvorený s oneskorením (napríklad pri offline režime zariadenia). Pole \texttt{scan\_timestamp} zodpovedá poľu \texttt{ts} z MQTT payloadu -- absolútnemu Unix času v milisekundách v pásme \textbf{UTC+0}, generovanému priamo na zariadení v momente skenovania. Zariadenie používa UTC+0 ako jednotný štandard, aby vylúčilo problémy s letným časom a časovými pásmami na strane firmvéru; prevod na lokálny čas vykonáva backend podľa nakonfigurovaného časového pásma. Čas zariadenie získava po pripojení k Wi-Fi synchronizáciou cez SNTP (\texttt{pool.ntp.org}, \texttt{time.google.com}). Pokiaľ synchronizácia ešte neprebehla, pole \texttt{ts} má hodnotu~\texttt{0} a backend taký záznam označí ako nevalidný.
 
 \subsubsection{Vzťahy medzi entitami}
 
@@ -300,7 +375,7 @@ Navrhnutý dátový model má niekoľko výhod:
 
 \begin{itemize}
     \item \textbf{Kompletnosť} -- model pokrýva všetky aspekty evidencie dochádzky vrátane správy používateľov, predmetov, miestností a vyučovacích hodín
-    \item \textbf{Normalizácia} -- štruktúra je v tretej normálnej forme (3NF), čo eliminuje redundanciu údajov
+    \item \textbf{Normalizácia} -- štruktúra je v tretej normálnej forme (3NF)~\cite{ramakrishnan:dbms}, čo eliminuje redundanciu údajov
     \item \textbf{Flexibilita} -- model umožňuje sledovanie dochádzky na úrovni jednotlivých hodín s možnosťou rozlíšenia stavu účasti
     \item \textbf{Auditovateľnosť} -- časové značky umožňujú sledovanie histórie záznamov a detekciu anomálií
     \item \textbf{Integrita} -- cudzí kľúče a jedinečné obmedzenia zabezpečujú konzistenciu údajov
@@ -318,18 +393,18 @@ Z hľadiska prevádzky je systém rozdelený na \textbf{zariadenie v učebni} (�
       \textbf{Zariadenie v učebni} (ESP-12F + PN532 + LED/bzučiak, 3,3~V)\\
       čítanie UID karty, lokálna spätná väzba, vytvorenie udalosti \texttt{scan}
     }}\\[4pt]
-    $\downarrow$\\[4pt]
+    $\updownarrow$\\[4pt]
     \fbox{\parbox{0.9\textwidth}{\centering
-      \textbf{Wi-Fi + MQTT} (publish do témy, napr.\ \texttt{\{base\_topic\}/\{deviceId\}/attendance})
+      \textbf{Wi-Fi + MQTT} (témy scopované na zariadenie: \texttt{\{baseTopic\}/\{deviceId\}/\ldots})
     }}\\[4pt]
-    $\downarrow$\\[4pt]
+    $\updownarrow$\\[4pt]
     \fbox{\parbox{0.9\textwidth}{\centering
       \textbf{MQTT broker} (napr.\ Mosquitto)
     }}\\[4pt]
-    $\downarrow$\\[4pt]
+    $\updownarrow$\\[4pt]
     \fbox{\parbox{0.9\textwidth}{\centering
-      \textbf{Backend} (MQTT subscriber + REST API)\\
-      spracovanie udalostí, REST API pre webové rozhranie
+      \textbf{Backend} (MQTT subscriber + publisher, REST API)\\
+      spracovanie udalostí, odosielanie konfigurácie a príkazov, REST API pre webové rozhranie
     }}\\[4pt]
     $\downarrow$\\[4pt]
     \fbox{\parbox{0.9\textwidth}{\centering
@@ -340,7 +415,9 @@ Z hľadiska prevádzky je systém rozdelený na \textbf{zariadenie v učebni} (�
   \label{fig:attendance-architecture}
 \end{figure}
 
-Hardvérové zariadenie nevykonáva komplexnú aplikačnú logiku (napr.\ mapovanie karty na študenta alebo vyhodnotenie, ku ktorej hodine sken patrí). Jeho úlohou je \textbf{spoľahlivo zachytiť udalosť} a odoslať ju do komunikačnej vrstvy. Všetky rozhodnutia, validácie a zápisy do databázy sa vykonávajú na serveri, čo zjednodušuje správu viacerých zariadení a umožňuje centralizované zmeny pravidiel.
+Komunikácia medzi hardvérovým zariadením a backendom je \textbf{obojsmerná} a prebieha výhradne cez MQTT broker. Zariadenie publikuje správy smerom k backendu (HW\,→\,SW): dochádzkové záznamy, pravidelný stav (\texttt{status}), zdravotný report (\texttt{health}), metriky služieb (\texttt{metrics}) a odpovede na konfiguračné požiadavky. Backend naopak posiela príkazy smerom k zariadeniu (SW\,→\,HW): aktualizáciu alebo načítanie konfigurácie (\texttt{config/set}, \texttt{config/get}), vyžiadanie okamžitého reportu (\texttt{status/request}, \texttt{health/request}, \texttt{metrics/request}) a spustenie OTA aktualizácie firmvéru (\texttt{ota/start}).
+
+Hardvérové zariadenie nevykonáva komplexnú aplikačnú logiku (napr.\ mapovanie karty na študenta alebo vyhodnotenie, ku ktorej hodine sken patrí). Jeho primárnou úlohou je \textbf{spoľahlivo zachytiť udalosť} a odoslať ju do komunikačnej vrstvy; okrem toho prijíma konfiguračné príkazy z backendu. Všetky rozhodnutia, validácie a zápisy do databázy sa vykonávajú na serveri, čo zjednodušuje správu viacerých zariadení a umožňuje centralizované zmeny pravidiel.
 
 \section{Ako prebieha zaznamenanie prítomnosti}
 
@@ -356,7 +433,7 @@ vo webovej aplikácii.
 \end{figure}
 
 \subsection{Krok 1: Skenovanie ISIC karty}
-Študent príde na vyučovanie a priloží ISIC kartu k NFC čítačke v učebni. Zariadenie načíta identifikátor karty a vytvorí udalosť dochádzky, ktorá obsahuje základné technické údaje (identifikátor karty, identifikátor zariadenia, čas načítania a~pod.).
+Študent príde na vyučovanie a priloží ISIC kartu k NFC čítačke v učebni. Zariadenie načíta identifikátor karty a vytvorí udalosť dochádzky obsahujúcu UID karty a časovú pečiatku v UTC+0 (podrobnosti o formáte časovej pečiatky sú uvedené pri popise dátového modelu, entita Attendance).
 
 \subsection{Krok 2: Odoslanie udalosti na server}
 Po načítaní karty zariadenie cez Wi-Fi odošle vytvorenú udalosť na server pomocou \textit{MQTT}. Tento prístup je vhodný aj pri väčšom počte učební a zariadení, pretože výmena správ je rýchla a rozšírenie o ďalšie zariadenia si nevyžaduje zásadné zmeny architektúry.

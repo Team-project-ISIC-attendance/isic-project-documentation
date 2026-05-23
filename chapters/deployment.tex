@@ -1,0 +1,117 @@
+\chapter{Nasadenie systému}
+\label{chap:deployment}
+
+Táto kapitola popisuje postup nasadenia systému \textit{ISIC Attendance} do prevádzky. Zahŕňa konfiguráciu serverovej časti, spustenie služieb, nahratie firmvéru do zariadenia a prvotné nastavenie po štarte.
+
+\section{Architektúra nasadenia}
+\label{sec:deployment-architecture}
+
+Systém pozostáva z troch serverových služieb a jedného fyzického zariadenia:
+
+\begin{itemize}
+    \item \textbf{Backend} -- FastAPI aplikácia obsluhujúca REST API a MQTT klienta,
+    \item \textbf{Frontend} -- statická React aplikácia slúžená cez Nginx,
+    \item \textbf{MQTT broker} -- Eclipse Mosquitto, sprostredkúva komunikáciu medzi zariadením a backendom,
+    \item \textbf{Hardvérové zariadenie} -- ESP32 / ESP-12F s modulom PN532, nasadené v učebni.
+\end{itemize}
+
+Všetky tri serverové služby sú kontajnerizované a spravované nástrojom Docker Compose. Zariadenie v učebni komunikuje s MQTT brokerom cez Wi-Fi; broker a backend musia byť sieťovo dostupné z danej siete.
+
+\section{Požiadavky}
+\label{sec:deployment-requirements}
+
+\begin{itemize}
+    \item \textbf{Server}: Docker a Docker Compose (verzia Compose V2). Ostatné závislosti -- Python runtime, Node.js, SQLite -- sú zahrnuté v Docker obrazoch.
+    \item \textbf{Sieť}: port \texttt{1883} (MQTT) musí byť dostupný zo siete, v ktorej sú umiestnené čítačky; port \texttt{8023} (backend API) a \texttt{5173} (frontend) pre klientov webového rozhrania.
+    \item \textbf{Flashovanie firmvéru}: počítač s nainštalovaným nástrojom PlatformIO a prístupom k USB portu zariadenia.
+\end{itemize}
+
+\section{Konfigurácia prostredia}
+\label{sec:deployment-env}
+
+Pred prvým spustením je potrebné vytvoriť súbor \texttt{.env} v koreňovom adresári projektu podľa vzoru \texttt{backend/.env.example}. Nasledujúce premenné je \textbf{povinné zmeniť} pred produkčným nasadením:
+
+\begin{table}[h!]
+  \centering
+  \caption{Povinné premenné prostredia pre produkčné nasadenie}
+  \label{tab:env-vars}
+  \begin{tabular}{lp{7.5cm}}
+    \toprule
+    Premenná & Popis \\
+    \midrule
+    \texttt{JWT\_SECRET\_KEY}   & Tajný kľúč na podpisovanie JWT tokenov; nahradiť silným náhodným reťazcom \\
+    \texttt{MQTT\_USERNAME}     & Prihlasovacie meno pre MQTT broker \\
+    \texttt{MQTT\_PASSWORD}     & Heslo pre MQTT broker; nahradiť silným heslom \\
+    \texttt{ADMIN\_EMAIL}       & E-mail predvoleného administrátorského účtu \\
+    \texttt{ADMIN\_PASSWORD}    & Heslo predvoleného administrátorského účtu \\
+    \texttt{SERVER\_HOST}       & IP adresa alebo hostname servera dostupného zo siete zariadení; používa sa pri OTA aktualizáciách \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Odporúčané voliteľné nastavenia:
+
+\begin{itemize}
+    \item \texttt{SCHEDULE\_TIME\_ZONE} -- časové pásmo rozvrhu (predvolene \texttt{Europe/Bratislava}); musí zodpovedať lokalite nasadenia,
+    \item \texttt{SCAN\_WINDOW\_BEFORE\_MINUTES} / \texttt{SCAN\_WINDOW\_AFTER\_MINUTES} -- šírka registračného okna okolo hodiny (predvolene 15~min pred a 5~min po),
+    \item \texttt{CORS\_ORIGINS} -- v produkcii obmedziť na konkrétnu doménu namiesto predvolenej hodnoty \texttt{*}.
+\end{itemize}
+
+\section{Spustenie serverových služieb}
+\label{sec:deployment-server}
+
+Po nakonfigurovaní \texttt{.env} súboru sa všetky tri služby spustia jedným príkazom:
+
+\begin{verbatim}
+docker compose up -d
+\end{verbatim}
+
+Docker Compose automaticky zostaví obrazy backendu a frontendu, stiahne obraz Mosquitto a prepojí služby do internej siete. Frontend čaká na zdravý stav backendu (healthcheck), preto môže inicializácia prvýkrát trvať niekoľko desiatok sekúnd.
+
+Po spustení sú služby dostupné na:
+\begin{itemize}
+    \item \texttt{http://<server>:5173} -- webové rozhranie (frontend),
+    \item \texttt{http://<server>:8023} -- REST API backendu,
+    \item \texttt{<server>:1883} -- MQTT broker.
+\end{itemize}
+
+Databázový súbor SQLite je uložený v \texttt{backend/data/database.db} a mapovaný ako Docker volume -- pri reštarte kontajnera sa dáta zachovajú.
+
+\subsection*{Prvé prihlásenie}
+
+Pri prvom štarte backend automaticky vytvorí administrátorský účet podľa hodnôt \texttt{ADMIN\_EMAIL} a \texttt{ADMIN\_PASSWORD} z \texttt{.env} súboru. Administrátor sa prihlási cez webové rozhranie a môže ihneď vytvoriť učiteľské účty a spárovať zariadenia.
+
+\section{Nahratie firmvéru do zariadenia}
+\label{sec:deployment-firmware}
+
+Firmvér sa kompiluje a flashuje pomocou PlatformIO z adresára \texttt{hardware/}:
+
+\begin{verbatim}
+pio run -e esp32          # zostavenie pre ESP32 (vývojová varianta)
+pio run -e esp8266        # zostavenie pre ESP8266 / ESP-12F (produkcia)
+pio run -t upload         # nahratie do pripojeného zariadenia cez USB
+\end{verbatim}
+
+\subsection*{Prvotná konfigurácia zariadenia (AP mód)}
+
+Po prvom spustení (alebo po vymazaní konfigurácie) zariadenie nenájde uložené sieťové nastavenia a automaticky spustí konfiguračný Wi-Fi access point s názvom začínajúcim predponou \texttt{ISIC-}. Postup konfigurácie:
+
+\begin{enumerate}
+    \item Pripojiť sa k access pointu zariadenia zo smartfónu alebo počítača.
+    \item Otvoriť webový prehliadač a prejsť na adresu \texttt{192.168.4.1}.
+    \item Zadať prihlasovacie údaje do Wi-Fi siete, adresu MQTT brokera, prihlasovacie meno a heslo pre MQTT.
+    \item Uložiť konfiguráciu -- zariadenie sa reštartuje a pripojí do siete.
+\end{enumerate}
+
+Konfigurácia sa uloží do flash pamäte (LittleFS) a pri každom ďalšom štarte sa zariadenie pripojí automaticky. Dodatočné nastavenia (napr.\ scan okno, piny, power management) je možné meniť za behu pomocou MQTT príkazov \texttt{config/set/<sekcia>} bez potreby reflashovania.
+
+\section{Prevádzkové odporúčania}
+\label{sec:deployment-operations}
+
+\begin{itemize}
+    \item \textbf{Zálohovanie databázy} -- súbor \texttt{backend/data/database.db} nie je replikovaný; odporúča sa pravidelná záloha, napríklad denným kopírovaním súboru na záložné úložisko.
+    \item \textbf{Aktualizácia firmvéru} -- po zostavení novej verzie firmvéru a nahratí na OTA server môže administrátor spustiť aktualizáciu všetkých zariadení z webového rozhrania bez fyzického prístupu k zariadeniu.
+    \item \textbf{Monitorovanie zariadení} -- administrátorské rozhranie zobrazuje online/offline stav každej čítačky na základe pravidelných \texttt{status} správ; výpadok zariadenia je teda okamžite viditeľný.
+    \item \textbf{MQTT bezpečnosť} -- broker je nakonfigurovaný s autentifikáciou; heslo MQTT musí byť rovnaké v \texttt{.env} súbore aj v konfigurácii každého zariadenia. Bez zhody sa zariadenie na broker nepripojí.
+    \item \textbf{Firewall} -- port \texttt{1883} je potrebné otvoriť len pre siete, z ktorých sú zariadenia dostupné. REST API (\texttt{8023}) a frontend (\texttt{5173}) môžu byť sprístupnené cez reverzný proxy (napr.\ Nginx alebo Traefik) s TLS.
+\end{itemize}

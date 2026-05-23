@@ -104,23 +104,27 @@ Jeden dochádzkový záznam obsahuje najmä:
     \item \texttt{seq} -- poradové číslo záznamu zo zariadenia.
 \end{enumerate}
 
-Po úspešnom načítaní údajov backend vytvorí záznam \texttt{ISICScan}. Tento záznam predstavuje samotný fakt, že konkrétna karta bola priložená k čítačke. Ak karta ešte nie je v databáze evidovaná, systém ju vie vytvoriť ako nový ISIC identifikátor. Tým sa zabezpečí, že sa nestratí ani sken karty, ktorá ešte nemá doplnené údaje študenta.
+Po úspešnom načítaní údajov backend vždy vytvorí záznam \texttt{ISICScan}, surový log každého priloženia karty. Ak karta ešte nie je v databáze, systém automaticky vytvorí nový záznam \texttt{ISIC} s daným UID. Sken je teda uložený vždy, bez ohľadu na to, či je karta priradená k nejakému študentovi.
 
-Po vytvorení skenu backend spustí logiku automatického započítania účasti. Táto logika sa pokúsi nájsť vhodnú aktívnu hodinu podľa času skenu a predmetov, v ktorých je študent zapísaný. Ak sa nájde zodpovedajúca hodina, systém aktualizuje dochádzkový záznam študenta.
+Samotný \texttt{ISICScan} však \textbf{nepredstavuje dochádzkový záznam} je to len technický log. Na frontende sa nezobrazuje; viditeľné sú iba záznamy \texttt{AttendanceRecord}, ktoré sa vytvárajú len pre karty zapísané do predmetu.
+
+Po vytvorení skenu backend spustí logiku automatického započítania účasti. Táto logika najprv overí, či je daná karta zapísaná v niektorom predmete. Ak nie je, spracovanie sa ukončí a žiadny dochádzkový záznam nevznikne a sken karty nezaregistrovaného študenta sa uloží do \texttt{ISICScan}, ale na frontende sa neobjaví. Ak karta je zapísaná, backend vyhľadá hodinu zodpovedajúcu dátumu a časovému oknu skenu a aktualizuje príslušný \texttt{AttendanceRecord}.
 
 Správy typu \texttt{status} sa odosielajú automaticky a slúžia na základné sledovanie dostupnosti a stavu hardvérového zariadenia. Backend ich môže používať na zistenie, či je čítačka online a či pravidelne komunikuje so systémom. Správy typu \texttt{health} obsahujú podrobnejšie diagnostické údaje, napríklad stav služieb, počet chýb alebo informácie o pripojení. Tieto správy sa spracúvajú oddelene od dochádzky, pretože priamo nevytvárajú záznam o účasti.
 
-V budúcnosti môžu byť tieto údaje použité v administračnom rozhraní, aby administrátor videl stav jednotlivých čítačiek. Administrátor tak môže jednoduchšie zistiť, či je zariadenie dostupné, či pravidelne odosiela stavové správy alebo či sa vyskytol technický problém.
+Správy \texttt{status} backend aktívne využíva na sledovanie dostupnosti zariadení. Na základe týchto správ systém určuje, či je čítačka online alebo offline, pre to táto informácia je zobrazená v administračnom rozhraní, kde administrátor vidí aktuálny stav každého zariadenia.
 \section{Automatické započítanie účasti}
 \label{sec:backend-auto-attendance}
 
 Najdôležitejšou časťou backendu je logika automatického započítania účasti. Po prijatí skenu karty backend najskôr vytvorí záznam o skene. Následne sa pokúsi nájsť hodinu, na ktorú sa sken vzťahuje.
 
-Backend najprv zistí, v ktorých predmetoch je daný študent zapísaný. Potom vyhľadá všetky nezrušené hodiny v daný dátum, ktoré patria týmto predmetom. Pre každú nájdenú hodinu overí, či čas skenu spadá do povoleného registračného okna. Toto okno je nastavené tak, že registrácia môže začať určitý počet minút pred začiatkom hodiny a končí určitý počet minút po jej skončení.
+Backend najprv zistí, v ktorých predmetoch je daná karta zapísaná. Ak nie je zapísaná v žiadnom predmete, spracovanie sa okamžite ukončí -- žiadny dochádzkový záznam nevznikne. Ak je zapísaná, backend vyhľadá všetky nezrušené hodiny v daný dátum patriace týmto predmetom. Ak žiadna taká hodina v daný deň neexistuje, spracovanie sa taktiež ukončí bez záznamu.
 
-Ak sken patrí do aktívneho okna, backend vyhľadá dochádzkový záznam pre danú hodinu a študenta. Ak záznam existuje a ešte nebol zapísaný skenom, nastaví jeho stav na \texttt{pritomny}. Zároveň nastaví, že záznam bol vytvorený pomocou skenu, a priradí k nemu príslušný \texttt{ISICScan}.
+Pre každú nájdenú hodinu backend overí, či čas skenu spadá do povoleného registračného okna. Okno začína konfigurovateľný počet minút pred začiatkom hodiny a končí konfigurovateľný počet minút po jej skončení. Ak sken nespadá do žiadneho okna, žiadna hodina sa nezapočíta.
 
-Táto logika pomáha zabezpečiť správne započítanie účasti. Systém nezapočíta účasť študentovi, ktorý nie je zapísaný v danom predmete, ani vtedy, keď v čase skenu neprebieha žiadna vhodná hodina. Zároveň je spracovanie idempotentné: ak už bol záznam zapísaný skenom, opakovaný sken nevytvorí ďalšiu duplicitnú účasť.
+Ak sken patrí do aktívneho okna, backend vyhľadá dochádzkový záznam (\texttt{AttendanceRecord}) pre danú hodinu a kartu. Ak taký záznam neexistuje -- napríklad preto, že karta bola do predmetu zapísaná až po vygenerovaní hodín -- účasť sa automaticky nezapočíta a sken zostane bez väzby na dochádzku. Ak záznam existuje a ešte nebol zapísaný skenom, nastaví jeho stav na \texttt{pritomny} a priradí k nemu príslušný \texttt{ISICScan}.
+
+Spracovanie je idempotentné: ak už bol záznam zapísaný skenom, opakovaný sken ho neprepíše.
 
 Dôležité je aj zachovanie manuálnych úprav vyučujúceho. Ak vyučujúci už manuálne nastavil iný stav ako \texttt{nepritomny}, automatický sken tento stav neprepíše. Tým sa predchádza situácii, keď by systém zmenil rozhodnutie vyučujúceho.
 
@@ -133,12 +137,46 @@ Dochádzkový záznam je možné manuálne upraviť. Vyučujúci tak môže štu
 
 Backend podporuje aj presun dochádzky na inú hodinu. Táto funkcionalita je užitočná napríklad pri náhradnej účasti, keď študent absolvuje hodinu v inom termíne. Pri presune backend kontroluje, či cieľová hodina patrí k rovnakému predmetu alebo zodpovedajúcej udalosti, aby nedošlo k nesprávnemu priradeniu účasti.
 
-\section{Export údajov}
+\section{Import, export a správa dochádzky}
 \label{sec:backend-export}
 
-Systém umožňuje exportovať údaje na ďalšie spracovanie. Backend podporuje export zoznamu študentov aj export dochádzky. Export môže byť vytvorený vo formáte CSV alebo XLSX.
+\subsection*{Import študentov}
 
-Pri exporte dochádzky backend vytvorí tabuľku, kde riadky predstavujú študentov a stĺpce jednotlivé hodiny. V bunkách sa nachádza stav dochádzky pre daného študenta a hodinu. Takýto formát je praktický pre vyučujúceho, pretože ho môže ďalej otvoriť napríklad v tabuľkovom editore.
+Systém umožňuje hromadný import študentov do predmetu zo súboru CSV. Formát súboru zodpovedá exportu zo študentského informačného systému AIS, čím odpadá potreba manuálneho prepisovania údajov. Parser rozoznáva viaceré varianty názvov stĺpcov (slovenské aj anglické, s diakritikou aj bez), pretože AIS môže exportovať stĺpce s mierne odlišnými názvami v závislosti od verzie alebo nastavenia. Povinné sú identifikátor čipu karty a ID študenta. Príklad importného súboru (vo formáte AIS exportu):
+
+\begin{verbatim}
+ID;Karta - čip;Celé meno s titulmi;E-mail IS
+AIS12345;04A1B2C3D4;Novák Ján;j.novak@stuba.sk
+AIS67890;04F5E6D7C8;Kováčová Jana;j.kovacova@stuba.sk
+\end{verbatim}
+
+Parser akceptuje oddeľovač \texttt{;} aj \texttt{,} a kódovanie UTF-8 aj Windows-1250. Riadky bez identifikátora karty alebo ID študenta sa preskočia a do odpovede sa zahrnie chyba s číslom riadku.
+
+\subsection*{Export zoznamu študentov}
+
+Backend umožňuje exportovať zoznam zapísaných študentov predmetu. Výstupný súbor má pevnú štruktúru stĺpcov:
+
+\begin{verbatim}
+ID;Karta - čip;Celé meno;Meno;Priezvisko;E-mail IS
+AIS12345;04A1B2C3D4;Ján Novák;Ján;Novák;j.novak@stuba.sk
+\end{verbatim}
+
+Tento formát je kompatibilný so spätným importom -- exportovaný súbor je možné priamo použiť ako vstup pre import do iného predmetu.
+
+\subsection*{Export dochádzky}
+
+Pri exporte dochádzky backend vytvorí maticu, kde riadky predstavujú študentov a stĺpce jednotlivé hodiny. Hlavička stĺpca obsahuje číslo týždňa, dátum, typ hodiny, čas a miestnosť:
+
+\begin{verbatim}
+Študent ID;Karta - čip;Celé meno;Meno;Priezvisko;
+  Týždeň 1 | 2025-02-17 | Cvičenie | 08:00-10:00 B-315;
+  Týždeň 2 | 2025-02-24 | Cvičenie | 08:00-10:00 B-315
+AIS12345;04A1B2C3D4;Ján Novák;Ján;Novák;Prítomný;Neprítomný
+\end{verbatim}
+
+Hodnoty buniek sú lokalizované: \texttt{Prítomný}, \texttt{Neprítomný}, \texttt{Náhrada}, \texttt{Ospravedlnený} alebo \texttt{Bez záznamu}. Export je dostupný vo formáte CSV aj XLSX.
+
+Export slúži \textbf{výhradne pre potreby vyučujúceho}. AIS nepodporuje import dochádzky zo súboru, preto neexistuje žiadna priama integrácia. Exportovaný súbor môže vyučujúci použiť na ďalšiu analýzu, archiváciu alebo manuálne zadanie do AIS.
 
 \section{Testovanie backendu}
 \label{sec:backend-testing}

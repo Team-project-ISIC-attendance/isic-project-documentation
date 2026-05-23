@@ -3,11 +3,11 @@
 
 Hardvérová časť systému \textit{ISIC Attendance} slúži na načítanie ISIC karty a odoslanie jej identifikátora do backendu. Zariadenie je navrhnuté ako samostatná čítačka, ktorá môže byť umiestnená v učebni. Študent priloží ISIC kartu k NFC modulu a zariadenie následne spracuje načítané UID karty.
 
-Ako riadiaca jednotka bol pôvodne plánovaný mikrokontrolér ESP12-F. Tento výber bol zvolený hlavne kvôli jeho dostupnosti, nízkej cene a nízkej spotrebe energie. Nízka spotreba bola dôležitá najmä preto, aby zariadenie pri napájaní z batérií vydržalo pracovať čo najdlhšie.
+Ako riadiaca jednotka bol pôvodne plánovaný mikrokontrolér ESP12-F~\cite{aithinker:esp12f,espressif:esp8266-trm}. Tento výber bol zvolený hlavne kvôli jeho dostupnosti, nízkej cene a nízkej spotrebe energie. Nízka spotreba bola dôležitá najmä preto, aby zariadenie pri napájaní z batérií vydržalo pracovať čo najdlhšie.
 
-Počas testovania sa však ukázalo, že ESP12-F má problém so stabilným pripojením k sieti eduroam. Pripojenie nebolo dostatočne spoľahlivé a pri reálnom použití by mohlo dochádzať k výpadkom komunikácie medzi čítačkou a backendom. Keďže stabilita pripojenia je pri dochádzkovom systéme dôležitá, bolo rozhodnuté použiť vývojovú dosku ESP32.
+Počas testovania sa však ukázalo, že ESP12-F má problém so stabilným pripojením k sieti eduroam. Pripojenie nebolo dostatočne spoľahlivé a pri reálnom použití by mohlo dochádzať k výpadkom komunikácie medzi čítačkou a backendom. Keďže stabilita pripojenia je pri dochádzkovom systéme dôležitá, bolo rozhodnuté použiť vývojovú dosku ESP32~\cite{espressif:esp32-trm}.
 
-Na čítanie kariet je použitý NFC modul PN532, ktorý komunikuje s mikrokontrolérom cez SPI rozhranie. Firmvér je implementovaný v jazyku C++ pomocou prostredia PlatformIO a Arduino frameworku.
+Na čítanie kariet je použitý NFC modul PN532~\cite{nxp:pn532-um}, ktorý komunikuje s mikrokontrolérom cez SPI rozhranie. Firmvér je implementovaný v jazyku C++ pomocou prostredia PlatformIO a Arduino frameworku.
 \section{Architektúra firmvéru}
 \label{subsec:firmware-architecture}
 
@@ -76,7 +76,7 @@ Komunikácia medzi hardvérovým zariadením a backendom je riešená pomocou pr
 Dochádzkové záznamy sa odosielajú do témy \texttt{attendance}. Záznamy sú vo formáte JSON a obsahujú najmä:
 \begin{enumerate}
     \item \texttt{uid} -- identifikátor načítanej karty,
-    \item \texttt{ts} -- časová pečiatka,
+    \item \texttt{ts} -- časová pečiatka v UTC+0 (Unix čas v milisekundách, generovaný na zariadení v momente skenu; backend ju prevádza na lokálny čas),
     \item \texttt{seq} -- poradové číslo záznamu.
 \end{enumerate}
 
@@ -124,11 +124,67 @@ Počas aktualizácie môže zariadenie odosielať informácie o priebehu, naprí
 \section{Riadenie spotreby}
 \label{subsec:hardware-power-management}
 
-Firmvér obsahuje aj službu \texttt{PowerService}, ktorá riadi spotrebu zariadenia. Systém rozlišuje stav samotného ESP mikrokontroléra a stav PN532 modulu. To znamená, že zariadenie môže napríklad ponechať ESP aktívne, ale NFC modul presunúť do úspornejšieho režimu.
+Firmvér obsahuje službu \texttt{PowerService}, ktorá riadi spotrebu zariadenia. Systém sleduje stav ESP mikrokontroléra a stav PN532 modulu nezávisle -- zariadenie tak môže napríklad ponechať ESP aktívne, ale NFC modul presunúť do úsporného režimu.
 
-Power management je navrhnutý tak, aby zariadenie vedelo reagovať na reálnu prevádzku v učebni. Počas intenzívneho používania, keď študenti prikladajú karty jeden za druhým, má čítačka zostať pripravená. Keď je zariadenie dlhšie neaktívne, môže prejsť do úspornejšieho režimu.
+\subsection*{Stavy zariadenia}
 
-Táto časť je dôležitá najmä vtedy, ak by zariadenie bolo napájané z batérie alebo ak je potrebné znížiť spotrebu počas nečinnosti.
+Systém rozlišuje tri stavy ESP a dva stavy PN532:
+\begin{itemize}
+    \item \textbf{Active} -- ESP plne bdie, PN532 aktívne skenuje,
+    \item \textbf{LightSleep} -- ESP je v ľahkom spánku (Wi-Fi zostáva aktívne), PN532 spomaľuje polling,
+    \item \textbf{ModemSleep} -- ESP vypína Wi-Fi modem, PN532 prechádza do PowerDown.
+\end{itemize}
+
+\subsection*{Progresívne časovanie prechodu do spánku}
+
+Prechod do úsporného režimu je \textbf{progresívny} a závisí od času nečinnosti (čas od poslednej aktivity -- predvolene iba sken karty):
+
+\begin{enumerate}
+    \item Po \textbf{1 minúte} nečinnosti (\texttt{readerIdleTimeoutMs}) zariadenie prejde do \textit{LightSleep} -- Wi-Fi zostáva pripojené, ale PN532 spomaľuje.
+    \item Po \textbf{15 minútach} nečinnosti (\texttt{modemSleepAfterMs}) zariadenie prejde do \textit{ModemSleep} -- vypne Wi-Fi modem a PN532 úplne.
+    \item Ak sa MQTT odpojí a zariadenie nie je v burst mode, okamžite prejde do \textit{ModemSleep} (\texttt{modemSleepOnMqttDisconnect}).
+\end{enumerate}
+
+\subsection*{Prebúdzanie a burst mode}
+
+Každý sken karty okamžite prebudí zariadenie do stavu \textit{Active} a resetuje časovač nečinnosti. Po každom skene zostáva zariadenie aktívne ešte \textbf{15 sekúnd} (\texttt{readerReadyHoldMs}), aby bolo pripravené na ďalšie priloženie bez oneskorenia.
+
+Ak v okne \textbf{5 minút} (\texttt{burstWindowMs}) priložia kartu aspoň \textbf{3 študenti} (\texttt{burstScanCount}), aktivuje sa \textit{burst mode} -- zariadenie zostane plne aktívne a spánok sa potláča počas celého hromadného príchodu. Burst mode skončí \textbf{5 minút} (\texttt{burstHoldMs}) po poslednom skene v dávke.
+
+\subsection*{Konfigurovateľnosť}
+
+Všetky časové prahy sú konfigurovateľné cez sekciu \texttt{power} v konfigurácii zariadenia a môžu byť zmenené za behu pomocou MQTT príkazu \texttt{config/set/power}. Automatický spánok je možné úplne vypnúť parametrom \texttt{autoSleepEnabled}.
+
+\subsection*{Obmedzenie PN532 a deep sleep}
+
+Počas vývoja bol identifikovaný zásadný problém s modulom PN532 v kontexte hlbokého spánku (deep sleep) mikrokontroléra. Karty ISIC sú \textbf{pasívne zariadenia} -- nemajú vlastný zdroj energie a nevysielajú žiadne elektromagnetické pole. Kartu je možné načítať len vtedy, keď čítačka aktívne generuje RF pole. Modul PN532 nie je schopný samostatne monitorovať priblíženie karty pri vypnutom procesore -- na iniciovanie čítania potrebuje aktívny príkaz od mikrokontroléra.
+
+Z tohto dôvodu nie je v tejto verzii použitý hlboký spánok ESP (deep sleep), pretože by nebolo možné zariadenie prebudiť priložením karty. Implementovaný progresívny model (\textit{LightSleep} → \textit{ModemSleep} + PN532 PowerDown) predstavuje kompromis dostupný s existujúcim hardvérom.
+
+Pre produkčnú verziu s výrazne nižšou spotrebou odporúčame nahradiť PN532 čipom \textbf{ST25R3916}~\cite{st:st25r3916} (STMicroelectronics), ktorý disponuje autonómnym \textit{wake-up} režimom: pri spotrebe pod 250~µA dokáže sledovať zmeny v RF poli a generovať prerušenie. Toto prerušenie je možné pripojiť na pin GPIO16 (RST) ESP8266 resp.\ na ext0/ext1 wakeup pin ESP32 a prebudiť mikrokontrolér z deep sleep priložením karty.
+
+\subsection*{Teoretické hodnoty spotreby}
+
+Nasledujúce hodnoty sú odvodené z datasheet výrobcov (Espressif~\cite{espressif:esp8266-trm,espressif:esp32-trm}, NXP~\cite{nxp:pn532-um}) a neboli reálne merané. Skutočné hodnoty závisia od Wi-Fi signálu, teploty a konkrétneho zapojenia.
+
+\begin{table}[h!]
+  \centering
+  \caption{Teoretická spotreba komponentov podľa prevádzkového režimu (zdroj: datasheet)}
+  \label{tab:power-consumption}
+  \begin{tabular}{lrrr}
+    \toprule
+    Režim & ESP8266 & ESP32 & PN532 \\
+    \midrule
+    Aktívny (Wi-Fi RX)    & $\sim$80~mA   & $\sim$160~mA  & $\sim$150~mA \\
+    Modem sleep           & $\sim$15~mA   & $\sim$20~mA   & $\sim$1,5~mA \\
+    Light sleep           & $\sim$0,9~mA  & $\sim$0,8~mA  & $\sim$1,5~mA \\
+    Deep sleep            & $\sim$0,02~mA & $\sim$0,01~mA & --- \\
+    PN532 power-down      & ---           & ---           & $<$0,01~mA \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Implementovaný \textit{ModemSleep} s vypínaním PN532 znižuje celkovú spotrebu z $\sim$230~mA na $\sim$15~mA počas dlhšej nečinnosti. Pri prechode na ST25R3916 s deep sleep by bola spotreba v kľude nižšia ako 0,3~mA.
 
 \section{Zhrnutie implementácie hardvéru}
 \label{subsec:hardware-summary}
